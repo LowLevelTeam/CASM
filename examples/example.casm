@@ -1,0 +1,29 @@
+; Simple COIL example program
+
+; Set processor to CPU
+PROC 0x01
+
+; Set architecture to x86-64
+ARCH 0x01, 0x03  ; x86 in 64-bit mode
+
+; Define text section
+SECTION .text, 0x01 | 0x04  ; Executable and Readable
+
+; Define our main function with standard ABI
+SYM main, TYPE_PARAM0=BRANCH_CTRL_ABI
+    ; Initialize counter
+    MOV TYPE_RGP=RAX, 0
+    
+    ; Loop start
+    SYM loop_start
+    CMP TYPE_RGP=RAX, 10
+    BR_GE loop_end
+    
+    ; Increment counter
+    INC TYPE_RGP=RAX
+    
+    ; Loop back
+    BR loop_start
+    
+    SYM loop_end
+    RET
