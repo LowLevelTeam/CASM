@@ -1,0 +1,69 @@
+; Simple COIL Assembly Example
+; This example demonstrates basic COIL features: variables, arithmetic, control flow, and functions
+
+PROC 0x01                     ; CPU
+ARCH 0x01, 0x03               ; x86-64
+
+SECTION .data, 0x02 | 0x04 | 0x08
+SYM hello_msg
+DATA TYPE_ARRAY=TYPE_UNT8, "Hello, COIL World!", 10, 0
+
+SECTION .text, 0x01 | 0x04
+; Function to add two numbers
+SYM add_numbers, TYPE_ABICTL=ABICTL_STANDARD=platform_default
+    SCOPEE
+    ; Get function parameters
+    VAR TYPE_INT32, a
+    VAR TYPE_INT32, b
+    MOV a, TYPE_ABICTL=ABICTL_PARAM=platform_default, 0
+    MOV b, TYPE_ABICTL=ABICTL_PARAM=platform_default, 1
+    
+    ; Add numbers
+    VAR TYPE_INT32, result
+    ADD result, a, b
+    
+    ; Return result
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, result
+    SCOPEL
+
+; Main function
+SYM main, TYPE_PARAM0=GLOB
+    SCOPEE
+    ; Declare and initialize variables
+    VAR TYPE_INT32, x, 10
+    VAR TYPE_INT32, y, 20
+    VAR TYPE_INT32, sum
+    
+    ; Call add_numbers function
+    CALL add_numbers, TYPE_ABICTL=ABICTL_PARAM=platform_default, x, y
+    MOV sum, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Compare sum to a threshold
+    CMP sum, 25
+    BR_LT below_threshold
+    
+    ; Code for sum >= 25
+    VAR TYPE_INT32, result1, 100
+    BR end_compare
+    
+below_threshold:
+    ; Code for sum < 25
+    VAR TYPE_INT32, result1, 50
+    
+end_compare:
+    ; A simple loop
+    VAR TYPE_INT32, counter, 0
+    VAR TYPE_INT32, limit, 5
+    
+loop_start:
+    CMP counter, limit
+    BR_GE loop_end
+    
+    ; Loop body
+    ADD counter, counter, 1
+    BR loop_start
+    
+loop_end:
+    ; Exit program
+    RET
+    SCOPEL
