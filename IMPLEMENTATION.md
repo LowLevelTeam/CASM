@@ -1,10 +1,10 @@
 # CASM Implementation Plan
 
-This document outlines the implementation approach, architecture, and development plans for the CASM assembler.
+This document outlines the implementation approach for the CASM assembler, a core component of the LLT COIL Toolchain.
 
 ## Architecture Overview
 
-CASM follows a classic compiler architecture with distinct phases:
+CASM follows a classic assembler architecture with distinct phases:
 
 1. **Lexical Analysis**: Convert source text to tokens
 2. **Parsing**: Build abstract syntax tree (AST) from tokens
@@ -18,14 +18,11 @@ The implementation is modular with clean separation of concerns, allowing for ea
 
 ```
 casm/
-├── CMakeLists.txt              # Main build system
+├── CMakeLists.txt
 ├── LICENSE                     # Unlicense
 ├── README.md                   # Project overview
-├── CONTRIBUTING.md             # Contribution guidelines
-├── IMPLEMENTATION.md           # This file
-│
 ├── include/                    # Public header files
-│   └── casm/                   # Main include directory
+│   └── casm/
 │       ├── lexer.h             # Lexical analyzer
 │       ├── parser.h            # Parser
 │       ├── ast.h               # Abstract syntax tree
@@ -33,132 +30,60 @@ casm/
 │       ├── code_generator.h    # Code generator
 │       ├── assembler.h         # Main assembler interface
 │       ├── directives.h        # Directive processing
-│       ├── optimizer.h         # Code optimization
-│       └── error_reporter.h    # Error reporting
-│
+│       └── optimizer.h         # Code optimization
 ├── src/                        # Implementation source files
-│   ├── lexer.cpp               # Lexical analyzer implementation
-│   ├── parser.cpp              # Parser implementation
-│   ├── ast.cpp                 # AST implementation
-│   ├── symbol_table.cpp        # Symbol table implementation
-│   ├── code_generator.cpp      # Code generator implementation
-│   ├── assembler.cpp           # Main assembler implementation
-│   ├── directives.cpp          # Directive processing implementation
-│   ├── optimizer.cpp           # Optimization implementation
-│   ├── error_reporter.cpp      # Error reporting implementation
-│   ├── main.cpp                # Entry point for command-line tool
-│   └── utils/                  # Utility implementations
-│       ├── logger.cpp          # Logging utility
-│       ├── file_utils.cpp      # File handling utilities
-│       └── options.cpp         # Command-line option processing
-│
 ├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   │   ├── lexer_tests.cpp     # Lexer tests
-│   │   ├── parser_tests.cpp    # Parser tests
-│   │   ├── ast_tests.cpp       # AST tests
-│   │   ├── symbol_table_tests.cpp # Symbol table tests
-│   │   ├── code_generator_tests.cpp # Code generator tests
-│   │   ├── directive_tests.cpp  # Directive tests
-│   │   └── optimizer_tests.cpp  # Optimizer tests
-│   ├── integration/            # Integration tests
-│   │   ├── assembly_tests.cpp   # End-to-end assembly tests
-│   │   └── error_handling_tests.cpp # Error reporting tests
-│   └── examples/               # Example CASM programs for testing
-│       ├── hello_world.casm     # Hello world example
-│       ├── arithmetic.casm      # Arithmetic operations example
-│       └── functions.casm       # Function call example
-│
-├── examples/                   # Example CASM programs
-│   ├── hello_world/            # Hello world example
-│   ├── fibonacci/              # Fibonacci sequence
-│   ├── sorting/                # Sorting algorithms
-│   └── data_structures/        # Data structure implementations
-│
-└── docs/                       # Documentation
-    ├── language/               # Language documentation
-    ├── api/                    # API documentation
-    ├── tutorials/              # Tutorials
-    └── examples/               # Annotated examples
+└── examples/                   # Example programs
 ```
 
 ## Implementation Plan
 
-### Phase 1: Core Functionality
+### Phase 1: Core Functionality (4-6 weeks)
 
 1. **Lexical Analysis**
    - Implement token definitions
    - Create lexer using finite state machine
-   - Implement error reporting for lexical errors
-   - Optimize for performance
+   - Add support for all CASM syntax elements
 
 2. **Parsing**
    - Define abstract syntax tree (AST) nodes
    - Implement recursive descent parser
-   - Create validation for syntax correctness
-   - Handle error recovery and reporting
+   - Add error recovery mechanisms
 
 3. **Symbol Table**
    - Implement symbol table with scope support
    - Create symbol resolution mechanism
    - Add support for forward references
-   - Implement error checking for symbols
 
-**Estimated Time**: 4-6 weeks
+### Phase 2: Code Generation (6-8 weeks)
 
-### Phase 2: Code Generation
+4. **Directive Processing**
+   - Implement section handling
+   - Add processor and architecture directives
+   - Create data directives
 
-4. **Code Generation Basics**
-   - Implement basic instruction encoding
-   - Create section handling
-   - Add directive processing
-   - Implement relocation table generation
-
-5. **Advanced Code Generation**
-   - Add support for complex expressions
-   - Implement addressing modes
-   - Create ABI support
-   - Add type system integration
+5. **Code Generation**
+   - Implement instruction encoding
+   - Create variable handling
+   - Add scope management
+   - Implement relocation generation
 
 6. **Binary Output**
    - Implement COIL object file format
-   - Create debug information generation
-   - Add symbol table output
-   - Implement validation of output
+   - Create symbol table output
+   - Add debug information generation
 
-**Estimated Time**: 6-8 weeks
-
-### Phase 3: Optimization and Features
+### Phase 3: Optimization and Advanced Features (4-6 weeks)
 
 7. **Optimization**
    - Implement constant folding
    - Add peephole optimization
    - Create instruction combining
-   - Add dead code elimination
 
 8. **Advanced Features**
    - Implement macro system
    - Add conditional assembly
    - Create include handling
-   - Implement platform-specific features
-
-**Estimated Time**: 4-6 weeks
-
-### Phase 4: Documentation and Polishing
-
-9. **Documentation**
-   - Create comprehensive language reference
-   - Write API documentation
-   - Develop tutorials and examples
-   - Create error message guide
-
-10. **Testing and Quality**
-    - Expand test coverage
-    - Perform performance optimization
-    - Add fuzz testing
-    - Create validation suite
-
-**Estimated Time**: 3-4 weeks
 
 ## Technical Approach
 
@@ -167,64 +92,36 @@ casm/
 The lexer will use a state machine-based approach for efficient tokenization:
 
 ```cpp
-Token Lexer::nextToken() {
-    skipWhitespaceAndComments();
+class Lexer {
+public:
+    Lexer(const std::string& source);
     
-    if (isAtEnd()) {
-        return Token(TokenType::END_OF_FILE, "", line_, column_);
-    }
+    // Get the next token from source
+    Token nextToken();
     
-    char c = current_;
-    advance();
+    // Get current position information
+    size_t getLine() const;
+    size_t getColumn() const;
     
-    switch (c) {
-        // Single-character tokens
-        case ':': return Token(TokenType::COLON, ":", line_, column_ - 1);
-        case ',': return Token(TokenType::COMMA, ",", line_, column_ - 1);
-        case ';': return Token(TokenType::SEMICOLON, ";", line_, column_ - 1);
-        case '#': return Token(TokenType::HASH, "#", line_, column_ - 1);
-        
-        // Number literals
-        case '0': {
-            // Check for hex or binary notation
-            if (peek() == 'x' || peek() == 'X') {
-                advance(); // Consume 'x'
-                return hexNumber();
-            }
-            else if (peek() == 'b' || peek() == 'B') {
-                advance(); // Consume 'b'
-                return binaryNumber();
-            }
-            // Fall back to regular number handling
-            position_--;
-            column_--;
-            current_ = c;
-            return number();
-        }
-        
-        // Identifiers and keywords
-        default:
-            if (std::isalpha(c) || c == '_') {
-                position_--;
-                column_--;
-                current_ = c;
-                return identifier();
-            }
-            else if (std::isdigit(c)) {
-                position_--;
-                column_--;
-                current_ = c;
-                return number();
-            }
-            else {
-                // Invalid character
-                std::ostringstream oss;
-                oss << "Unexpected character '" << c << "'";
-                setError(0x01000001, oss.str()); // Syntax error code
-                return Token(TokenType::INVALID, std::string(1, c), line_, column_ - 1);
-            }
-    }
-}
+private:
+    std::string source_;
+    size_t position_;
+    size_t line_;
+    size_t column_;
+    
+    // Helper methods
+    char currentChar() const;
+    char peekNext() const;
+    void advance();
+    
+    // Token parsing methods
+    Token parseIdentifier();
+    Token parseNumber();
+    Token parseString();
+    
+    // Skip whitespace and comments
+    void skipWhitespaceAndComments();
+};
 ```
 
 ### Parsing
@@ -232,41 +129,33 @@ Token Lexer::nextToken() {
 The parser will use a recursive descent approach with predictable error recovery:
 
 ```cpp
-std::unique_ptr<Statement> Parser::parseStatement() {
-    // Check for a label
-    if (current().type == TokenType::IDENTIFIER && peek().type == TokenType::COLON) {
-        auto identifier = advance(); // Consume identifier
-        advance(); // Consume colon
-        return parseLabel(identifier);
-    }
+class Parser {
+public:
+    Parser(Lexer& lexer, ErrorReporter& errorReporter);
     
-    // Check for directives (keywords)
-    if (current().type >= TokenType::KW_PROC && current().type <= TokenType::KW_TARGET) {
-        auto directive = advance();
-        return parseDirective(directive);
-    }
+    // Parse a complete source file
+    std::unique_ptr<SourceFile> parse();
     
-    // Check for instructions
-    if (current().type >= TokenType::INSTR_MOV && current().type <= TokenType::INSTR_SYSCALL) {
-        auto instruction = advance();
-        return parseInstruction(instruction);
-    }
+private:
+    Lexer& lexer_;
+    ErrorReporter& errorReporter_;
+    Token currentToken_;
     
-    // Invalid statement
-    std::ostringstream oss;
-    oss << "Expected statement, got '" << current().lexeme << "'";
-    setError(0x01020002, oss.str()); // Invalid statement error
+    // Helper methods
+    Token consume();
+    Token expect(TokenType type, const std::string& errorMessage);
+    bool match(TokenType type);
     
-    // Error recovery: skip to next statement
-    while (!isAtEnd() && current().type != TokenType::SEMICOLON) {
-        advance();
-    }
-    if (!isAtEnd()) {
-        advance(); // Consume semicolon
-    }
+    // Parsing methods
+    std::unique_ptr<Statement> parseStatement();
+    std::unique_ptr<Instruction> parseInstruction();
+    std::unique_ptr<Directive> parseDirective();
+    std::unique_ptr<Expression> parseExpression();
+    std::unique_ptr<Label> parseLabel();
     
-    return nullptr;
-}
+    // Error recovery
+    void synchronize();
+};
 ```
 
 ### Code Generation
@@ -276,39 +165,30 @@ The code generator will use a visitor pattern to traverse the AST:
 ```cpp
 class CodeGenerator : public ASTVisitor {
 public:
-    CodeGenerator(const SymbolTable& symbols);
+    CodeGenerator(SymbolTable& symbols, ErrorReporter& errorReporter);
     
+    // Generate code for a source file
     std::unique_ptr<CoilObject> generate(const SourceFile& sourceFile);
     
-    // Visitor methods for different AST nodes
-    void visit(const LabelStatement& label) override;
-    void visit(const DirectiveStatement& directive) override;
-    void visit(const InstructionStatement& instruction) override;
-    void visit(const IntLiteralExpr& intLiteral) override;
-    void visit(const FloatLiteralExpr& floatLiteral) override;
-    void visit(const StringLiteralExpr& stringLiteral) override;
-    void visit(const IdentifierExpr& identifier) override;
-    void visit(const VariableExpr& variable) override;
-    void visit(const RegisterExpr& reg) override;
-    void visit(const TypeExpr& type) override;
-    void visit(const MemoryRefExpr& memoryRef) override;
-    void visit(const BinaryOpExpr& binaryOp) override;
-    void visit(const TypeCastExpr& typeCast) override;
+    // Visit methods for AST nodes
+    void visit(const InstructionNode& instruction) override;
+    void visit(const DirectiveNode& directive) override;
+    void visit(const LabelNode& label) override;
+    void visit(const ExpressionNode& expression) override;
     
 private:
-    const SymbolTable& symbols_;
-    std::unique_ptr<CoilObject> currentObject_;
+    SymbolTable& symbols_;
+    ErrorReporter& errorReporter_;
+    std::unique_ptr<CoilObject> coilObject_;
     Section* currentSection_;
-    std::vector<uint8_t> currentSectionData_;
-    uint32_t currentAddress_;
-    std::unordered_map<std::string, uint16_t> symbolIndices_;
-    std::vector<Relocation> relocations_;
     
-    void generateInstruction(const InstructionStatement& instruction);
-    void handleDirective(const DirectiveStatement& directive);
-    std::vector<uint8_t> encodeOperand(const Expression& expr);
-    void addSymbol(const std::string& name, uint32_t value, uint32_t attributes);
-    void addRelocation(uint32_t offset, const std::string& symbolName, uint8_t type, uint8_t size);
+    // Helper methods
+    void processInstruction(const InstructionNode& instruction);
+    void processDirective(const DirectiveNode& directive);
+    void processLabel(const LabelNode& label);
+    
+    // Generate binary for operands
+    std::vector<uint8_t> generateOperand(const ExpressionNode& expression);
 };
 ```
 
@@ -321,40 +201,18 @@ class Optimizer {
 public:
     Optimizer(int level);
     
-    std::unique_ptr<SourceFile> optimize(const SourceFile& sourceFile);
+    // Optimize a source file
+    void optimize(SourceFile& sourceFile);
     
 private:
     int level_;
-    std::vector<std::unique_ptr<OptimizationPass>> passes_;
-    
-    void setupPasses();
     
     // Optimization passes
-    class ConstantFoldingPass;
-    class DeadCodeEliminationPass;
-    class PeepholeOptimizationPass;
-    class InstructionCombiningPass;
-    class RegisterAllocationPass;
+    void constantFolding(SourceFile& sourceFile);
+    void instructionCombining(SourceFile& sourceFile);
+    void deadCodeElimination(SourceFile& sourceFile);
+    void peepholeOptimization(SourceFile& sourceFile);
 };
-```
-
-## Error Handling
-
-CASM will use a comprehensive error handling system:
-
-1. **Error Classification**: Structured error codes
-2. **Context-Aware Reporting**: Error messages with line and column information
-3. **Error Recovery**: Continue parsing after errors when possible
-4. **Diagnostics**: Detailed error messages with suggestions
-
-Example error reporting:
-
-```
-error: syntax error at line 42, column 10: expected ')', found ';'
-   42 | CALL function(arg1, arg2;
-                          ^
-note: missing closing parenthesis
-suggestion: CALL function(arg1, arg2)
 ```
 
 ## Testing Strategy
@@ -366,75 +224,25 @@ The testing approach for CASM includes:
    - Parser syntax handling
    - AST construction
    - Code generation
-   - Optimization passes
 
 2. **Integration Tests**: Test end-to-end assembly
    - Complete programs
    - Error handling
    - Optimization effects
 
-3. **Reference Tests**: Compare against specification
+3. **Reference Tests**: Test against specification
    - Instruction encoding
    - Directive behavior
    - Output format
 
-4. **Performance Tests**: Measure and optimize
-   - Assembly speed
-   - Memory usage
-   - Output size
-
-The testing framework will use a modern C++ testing framework (e.g., Catch2 or Google Test) and will include both automated and manual test cases.
-
-## Deliverables
-
-The final deliverables for CASM include:
-
-1. **Command-Line Tool**:
-   - `casm` executable with full functionality
-   - Support for all command-line options
-
-2. **Library Components**:
-   - Static and shared libraries for embedding
-   - C and C++ APIs for integration
-
-3. **Documentation**:
-   - Language reference
-   - API documentation
-   - Usage examples
-   - Error message guide
-
-4. **Tests and Examples**:
-   - Comprehensive test suite
-   - Example programs
-   - Benchmarks
+The testing framework will use a modern C++ testing framework (Catch2 or Google Test) and include comprehensive coverage of all components.
 
 ## Timeline
 
 | Phase | Duration | Key Milestones |
 |-------|----------|---------------|
-| Phase 1 | 4-6 weeks | - Basic lexer and parser<br>- Symbol table<br>- Simple instruction encoding |
-| Phase 2 | 6-8 weeks | - Complete code generation<br>- COIL object file output<br>- Complex expression support |
-| Phase 3 | 4-6 weeks | - Optimization passes<br>- Macro system<br>- Advanced features |
-| Phase 4 | 3-4 weeks | - Documentation<br>- Performance optimization<br>- Test suite completion |
+| Phase 1 | 4-6 weeks | Basic lexer, parser, symbol table |
+| Phase 2 | 6-8 weeks | Code generation, directives, output |
+| Phase 3 | 4-6 weeks | Optimization, macros, includes |
 
-Total estimated duration: 17-24 weeks for a complete, production-ready implementation.
-
-## Dependencies
-
-CASM has minimal external dependencies:
-
-1. **libcoil-dev**: Core library for COIL format and utilities
-2. **C++ Standard Library**: For containers, algorithms, and I/O
-3. **CMake**: Build system
-
-No other third-party libraries are required for the core functionality.
-
-## Development Process
-
-The development process will follow these practices:
-
-1. **Test-Driven Development**: Write tests before implementation
-2. **Continuous Integration**: Automated testing on each commit
-3. **Code Reviews**: Peer review for all code changes
-4. **Documentation**: Update documentation with code changes
-5. **Benchmarking**: Regular performance testing
+Total estimated duration: 14-20 weeks for a complete implementation.
