@@ -1,0 +1,146 @@
+; Data manipulation example for CASM
+PROC 0x01                       ; CPU processor
+ARCH 0x01, 0x03                 ; x86-64 architecture
+
+; Data section
+SECTION .data, 0x02 | 0x04 | 0x08
+
+; Integer values
+SYM int8_value
+DATA TYPE_INT8, -42
+
+SYM int16_value
+DATA TYPE_INT16, 1234
+
+SYM int32_value
+DATA TYPE_INT32, 42000
+
+SYM int64_value
+DATA TYPE_INT64, 1234567890
+
+; Floating-point values
+SYM float32_value
+DATA TYPE_FP32, 3.14159
+
+SYM float64_value
+DATA TYPE_FP64, 2.71828
+
+; String data
+SYM string_data
+DATA TYPE_ARRAY=TYPE_UNT8, "Hello, COIL!", 0
+
+; Array of integers
+SYM int_array
+DATA TYPE_INT32, 10
+DATA TYPE_INT32, 20
+DATA TYPE_INT32, 30
+DATA TYPE_INT32, 40
+DATA TYPE_INT32, 50
+
+; BSS section (uninitialized data)
+SECTION .bss, 0x02 | 0x04 | 0x10
+
+; Buffer (1024 bytes)
+SYM buffer
+ALIGN 16                        ; 16-byte alignment
+; No DATA directive needed for BSS section
+
+; Code section
+SECTION .text, 0x01 | 0x04
+
+; Function to copy string
+SYM copy_string
+    SCOPEE
+    ; Parameters
+    VAR #1, TYPE_PTR            ; Destination
+    VAR #2, TYPE_PTR            ; Source
+    MOV #1, TYPE_ABICTL=ABICTL_PARAM=platform_default, 0
+    MOV #2, TYPE_ABICTL=ABICTL_PARAM=platform_default, 1
+    
+    ; Loop variables
+    VAR #3, TYPE_INT32, 0       ; Index
+    
+    ; Loop start
+copy_loop:
+    ; Load byte from source
+    VAR #4, TYPE_UNT8
+    MOV #4, [#2 + #3]
+    
+    ; Check for null terminator
+    CMP #4, 0
+    BR_EQ copy_done
+    
+    ; Store byte to destination
+    MOV [#1 + #3], #4
+    
+    ; Increment index
+    INC #3
+    
+    ; Continue loop
+    BR copy_loop
+    
+copy_done:
+    ; Add null terminator
+    MOV [#1 + #3], 0
+    
+    ; Return length (excluding null terminator)
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #3
+    SCOPEL
+
+; Function to calculate sum of array
+SYM array_sum
+    SCOPEE
+    ; Parameters
+    VAR #1, TYPE_PTR            ; Array pointer
+    VAR #2, TYPE_INT32          ; Array length
+    MOV #1, TYPE_ABICTL=ABICTL_PARAM=platform_default, 0
+    MOV #2, TYPE_ABICTL=ABICTL_PARAM=platform_default, 1
+    
+    ; Loop variables
+    VAR #3, TYPE_INT32, 0       ; Index
+    VAR #4, TYPE_INT32, 0       ; Sum
+    
+    ; Loop start
+sum_loop:
+    ; Check loop condition
+    CMP #3, #2
+    BR_GE sum_done
+    
+    ; Load element from array
+    VAR #5, TYPE_INT32
+    MOV #5, [#1 + #3 * 4]       ; 4 bytes per int32
+    
+    ; Add to sum
+    ADD #4, #4, #5
+    
+    ; Increment index
+    INC #3
+    
+    ; Continue loop
+    BR sum_loop
+    
+sum_done:
+    ; Return sum
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #4
+    SCOPEL
+
+; Main function
+SYM main, TYPE_PARAM0=GLOB
+    SCOPEE
+    ; Copy string
+    VAR #1, TYPE_PTR, buffer    ; Destination
+    VAR #2, TYPE_PTR, string_data ; Source
+    CALL copy_string, TYPE_ABICTL=ABICTL_PARAM=platform_default, #1, #2
+    VAR #3, TYPE_INT32          ; Length
+    MOV #3, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Calculate array sum
+    VAR #4, TYPE_PTR, int_array ; Array pointer
+    VAR #5, TYPE_INT32, 5       ; Array length
+    CALL array_sum, TYPE_ABICTL=ABICTL_PARAM=platform_default, #4, #5
+    VAR #6, TYPE_INT32          ; Sum
+    MOV #6, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Return a value
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #6
+    SCOPEL

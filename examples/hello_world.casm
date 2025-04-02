@@ -1,0 +1,37 @@
+; Hello World example for CASM
+PROC 0x01                       ; CPU processor
+ARCH 0x01, 0x03                 ; x86-64 architecture
+
+; Define Linux syscall ABI for x86-64
+ABI linux_syscall
+  PARAMS RAX, RDI, RSI, RDX, R10, R8, R9
+  RETS RAX
+  CALLER RAX, RCX, R11
+  CALLEE RBX, RSP, RBP, R12, R13, R14, R15
+  SALLIGN 16
+  RZONE 0
+EXIT
+
+; Data section for message
+SECTION .data, 0x02 | 0x04 | 0x08
+SYM hello_msg
+DATA TYPE_ARRAY=TYPE_UNT8, "Hello, World!", 10, 0  ; String with newline and null terminator
+
+; Code section
+SECTION .text, 0x01 | 0x04
+SYM _start, TYPE_PARAM0=GLOB    ; Global entry point
+    SCOPEE
+    ; System call variables
+    VAR #1, TYPE_UNT64, 1       ; syscall number (write)
+    VAR #2, TYPE_UNT64, 1       ; file descriptor (stdout)
+    VAR #3, TYPE_PTR, hello_msg ; message pointer
+    VAR #4, TYPE_UNT64, 14      ; message length (including newline)
+    
+    ; Write syscall using linux_syscall ABI
+    SYSCALL TYPE_ABICTL=ABICTL_PARAM=linux_syscall, #1, #2, #3, #4
+    
+    ; Exit syscall using linux_syscall ABI
+    VAR #5, TYPE_UNT64, 60      ; syscall number (exit)
+    VAR #6, TYPE_UNT64, 0       ; exit code
+    SYSCALL TYPE_ABICTL=ABICTL_PARAM=linux_syscall, #5, #6
+    SCOPEL

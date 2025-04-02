@@ -1,0 +1,88 @@
+; Function example for CASM
+PROC 0x01                       ; CPU processor
+ARCH 0x01, 0x03                 ; x86-64 architecture
+
+; Define platform-default ABI
+ABI platform_default
+  PARAMS RDI, RSI, RDX, RCX, R8, R9
+  RETS RAX, RDX
+  CALLER RAX, RCX, RDX, RSI, RDI, R8, R9, R10, R11
+  CALLEE RBX, RSP, RBP, R12, R13, R14, R15
+  SALLIGN 16
+  RZONE 128
+EXIT
+
+; Code section
+SECTION .text, 0x01 | 0x04
+
+; Function to add two numbers
+SYM add_numbers
+    SCOPEE
+    ; Function parameters
+    VAR #1, TYPE_INT32          ; First parameter
+    VAR #2, TYPE_INT32          ; Second parameter
+    MOV #1, TYPE_ABICTL=ABICTL_PARAM=platform_default, 0
+    MOV #2, TYPE_ABICTL=ABICTL_PARAM=platform_default, 1
+    
+    ; Function body
+    VAR #3, TYPE_INT32          ; Result
+    ADD #3, #1, #2              ; Add numbers
+    
+    ; Return result
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #3
+    SCOPEL
+
+; Function to calculate factorial (recursive)
+SYM factorial
+    SCOPEE
+    ; Function parameter
+    VAR #1, TYPE_INT32          ; n
+    MOV #1, TYPE_ABICTL=ABICTL_PARAM=platform_default, 0
+    
+    ; Check base case
+    CMP #1, 1
+    BR_LE base_case
+    
+    ; Recursive case
+    VAR #2, TYPE_INT32          ; n-1
+    SUB #2, #1, 1
+    
+    ; Call factorial(n-1)
+    PUSH #2
+    CALL factorial, TYPE_ABICTL=ABICTL_PARAM=platform_default, #2
+    VAR #3, TYPE_INT32
+    MOV #3, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Multiply n * factorial(n-1)
+    VAR #4, TYPE_INT32
+    MUL #4, #1, #3
+    
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #4
+    
+base_case:
+    ; Return 1 for base case
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, 1
+    SCOPEL
+
+; Main function to demonstrate function calls
+SYM main, TYPE_PARAM0=GLOB
+    SCOPEE
+    ; Call add_numbers
+    VAR #1, TYPE_INT32, 10      ; First argument
+    VAR #2, TYPE_INT32, 20      ; Second argument
+    CALL add_numbers, TYPE_ABICTL=ABICTL_PARAM=platform_default, #1, #2
+    VAR #3, TYPE_INT32
+    MOV #3, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Call factorial
+    VAR #4, TYPE_INT32, 5       ; Argument
+    CALL factorial, TYPE_ABICTL=ABICTL_PARAM=platform_default, #4
+    VAR #5, TYPE_INT32
+    MOV #5, TYPE_ABICTL=ABICTL_RET=platform_default
+    
+    ; Return sum of results
+    VAR #6, TYPE_INT32
+    ADD #6, #3, #5
+    
+    RET TYPE_ABICTL=ABICTL_RET=platform_default, #6
+    SCOPEL
