@@ -115,6 +115,9 @@ Token Lexer::scanIdentifier() {
     advance();
   }
   
+  // Check for known opcodes or labels
+  std::string value = source.substr(start, current - start);
+  
   // Create token
   return makeToken(TokenType::Identifier);
 }

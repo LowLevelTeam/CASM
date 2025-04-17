@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <iostream>
 
 // Helper function to read file to string
 std::string readFile(const std::string& filename) {
@@ -20,6 +21,17 @@ std::string readFile(const std::string& filename) {
     std::istreambuf_iterator<char>(file),
     std::istreambuf_iterator<char>()
   );
+}
+
+// Helper function to print assembly errors
+void printAssemblyErrors(const casm::CASM& casm) {
+  const auto& errors = casm.getErrors();
+  if (!errors.empty()) {
+    std::cerr << "Assembly errors:" << std::endl;
+    for (const auto& err : errors) {
+      std::cerr << "  - " << err << std::endl;
+    }
+  }
 }
 
 TEST_CASE("CASM basic assembly", "[casm]") {
@@ -41,11 +53,33 @@ TEST_CASE("CASM basic assembly", "[casm]") {
   
   // Assemble to temporary file
   std::string outFile = "test_out.coil";
-  REQUIRE(casm.assemble(source, outFile));
+  bool assembleResult = casm.assemble(source, outFile);
+  
+  // Print errors if assembly failed
+  if (!assembleResult) {
+    INFO("Assembly failed with errors:");
+    for (const auto& err : casm.getErrors()) {
+      INFO("  - " << err);
+    }
+    printAssemblyErrors(casm);
+  }
+  
+  REQUIRE(assembleResult);
   
   // Disassemble back
   std::string disasmFile = "test_out.casm";
-  REQUIRE(casm.disassemble(outFile, disasmFile));
+  bool disassembleResult = casm.disassemble(outFile, disasmFile);
+  
+  // Print errors if disassembly failed
+  if (!disassembleResult) {
+    INFO("Disassembly failed with errors:");
+    for (const auto& err : casm.getErrors()) {
+      INFO("  - " << err);
+    }
+    printAssemblyErrors(casm);
+  }
+  
+  REQUIRE(disassembleResult);
   
   // Cleanup
   std::filesystem::remove(outFile);
@@ -96,10 +130,32 @@ TEST_CASE("CASM roundtrip", "[casm]") {
   casm::CASM casm;
   
   // Assemble
-  REQUIRE(casm.assemble(source, binFile));
+  bool assembleResult = casm.assemble(source, binFile);
+  
+  // Print errors if assembly failed
+  if (!assembleResult) {
+    INFO("Assembly failed with errors:");
+    for (const auto& err : casm.getErrors()) {
+      INFO("  - " << err);
+    }
+    printAssemblyErrors(casm);
+  }
+  
+  REQUIRE(assembleResult);
   
   // Disassemble
-  REQUIRE(casm.disassemble(binFile, disasmFile));
+  bool disassembleResult = casm.disassemble(binFile, disasmFile);
+  
+  // Print errors if disassembly failed
+  if (!disassembleResult) {
+    INFO("Disassembly failed with errors:");
+    for (const auto& err : casm.getErrors()) {
+      INFO("  - " << err);
+    }
+    printAssemblyErrors(casm);
+  }
+  
+  REQUIRE(disassembleResult);
   
   // Read disassembled code
   std::string disasmCode = readFile(disasmFile);

@@ -143,6 +143,12 @@ coil::Result CodeGenerator::processSection(const SectionStatement* section) {
 
 // Process a label statement
 coil::Result CodeGenerator::processLabel(const LabelStatement* label) {
+  // Check if we're in a section
+  if (currentSectionIndex == 0) {
+    error("Label defined outside of a section", label->line);
+    return coil::Result::BadState;
+  }
+  
   // Get current position in instruction block
   uint32_t position = currentBlock.getInstructionCount();
   
@@ -154,6 +160,12 @@ coil::Result CodeGenerator::processLabel(const LabelStatement* label) {
 
 // Process an instruction statement
 coil::Result CodeGenerator::processInstruction(const InstructionStatement* instr) {
+  // Check if we're in a section
+  if (currentSectionIndex == 0) {
+    error("Instruction used outside of a section", instr->line);
+    return coil::Result::BadState;
+  }
+  
   // Create COIL instruction
   coil::Instruction coilInstr = createInstruction(instr);
   
@@ -233,8 +245,20 @@ coil::Operand CodeGenerator::convertOperand(const InstructionOperand& op) {
 
 // Process a directive statement
 coil::Result CodeGenerator::processDirective(const DirectiveStatement* directive) {
-  // Check if current section exists
-  if (currentSectionIndex == 0 && directive->name != ".section") {
+  // Special handling for .section directive
+  if (directive->name == ".section") {
+    if (directive->args.empty()) {
+      error("Section directive requires a name", directive->line);
+      return coil::Result::InvalidArg;
+    }
+    
+    // Create a section statement and process it
+    SectionStatement section(directive->args[0], directive->line);
+    return processSection(&section);
+  }
+  
+  // Check if current section exists for other directives
+  if (currentSectionIndex == 0) {
     error("Directive used outside of a section", directive->line);
     return coil::Result::BadState;
   }

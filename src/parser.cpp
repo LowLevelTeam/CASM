@@ -150,27 +150,26 @@ std::unique_ptr<Statement> Parser::parseStatement() {
   }
   
   // Check for different statement types
-  if (match(TokenType::Directive) && peek().value == ".section") {
-    return parseSection();
+  if (check(TokenType::Directive)) {
+    Token directiveToken = peek();
+    
+    // Check if this is a section directive
+    if (directiveToken.value == ".section") {
+      advance(); // Consume .section
+      return parseSection();
+    }
+    
+    // Other directives
+    return parseDirective();
   }
   
+  // Check for label definition
   if (check(TokenType::Identifier) && peekNext().type == TokenType::Colon) {
     return parseLabel();
   }
   
-  if (match(TokenType::Directive)) {
-    return parseDirective();
-  }
-  
-  if (check(TokenType::Identifier) || check(TokenType::OpCode)) {
-    return parseInstruction();
-  }
-  
-  // Skip unknown tokens
-  Token token = advance();
-  std::stringstream ss;
-  ss << "Unexpected token: " << token.value;
-  throw std::runtime_error(ss.str());
+  // Must be an instruction
+  return parseInstruction();
 }
 
 // Parse a section statement
@@ -204,8 +203,31 @@ std::unique_ptr<InstructionStatement> Parser::parseInstruction() {
   coil::InstrFlag0 flag = coil::InstrFlag0::None;
   coil::ValueType valueType = coil::ValueType::I32; // Default type
   
-  // Check for type or flag suffix
-  if (match(TokenType::Period)) {
+  // Check for type or flag suffix in the opcode (e.g., br.lte)
+  size_t dotPos = opcode.find('.');
+  if (dotPos != std::string::npos) {
+    // Extract the flag or type suffix
+    std::string suffix = opcode.substr(dotPos + 1);
+    opcode = opcode.substr(0, dotPos);
+    
+    // Check if it's a type
+    auto typeIt = typeMap.find(suffix);
+    if (typeIt != typeMap.end()) {
+      valueType = typeIt->second;
+    } else {
+      // Must be a flag
+      auto flagIt = flagMap.find(suffix);
+      if (flagIt != flagMap.end()) {
+        flag = flagIt->second;
+      } else {
+        std::stringstream ss;
+        ss << "Unknown suffix: " << suffix;
+        throw std::runtime_error(ss.str());
+      }
+    }
+  }
+  // Also check for explicit type or flag suffix with a period token
+  else if (match(TokenType::Period)) {
     Token suffix = consume(TokenType::Identifier, "Expected type or flag after '.'");
     
     // Check if it's a type
@@ -251,9 +273,9 @@ std::unique_ptr<InstructionStatement> Parser::parseInstruction() {
 
 // Parse a directive statement
 std::unique_ptr<DirectiveStatement> Parser::parseDirective() {
-  // Get directive name from previous token
-  Token previous = tokens[current - 1];
-  std::string name = previous.value;
+  // Get directive name
+  Token directiveToken = consume(TokenType::Directive, "Expected directive");
+  std::string name = directiveToken.value;
   
   // Parse arguments
   std::vector<std::string> args;
@@ -275,7 +297,7 @@ std::unique_ptr<DirectiveStatement> Parser::parseDirective() {
   return std::make_unique<DirectiveStatement>(
     name,
     args,
-    previous.line
+    directiveToken.line
   );
 }
 
