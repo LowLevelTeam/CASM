@@ -1,6 +1,8 @@
 # Test configuration
 test_sources = [
-  'test_casm.cpp',
+  'test_parser.cpp',
+  'test_codegen.cpp',
+  'test_assembler.cpp',
 ]
 
 # Include catch2-with-main
@@ -21,9 +23,9 @@ endif
 # Build the test executable
 test_exe = executable('casm_tests',
   test_sources,
-  dependencies : [casm_dep, coil_dep, catch2_main_dep],
+  dependencies : [casm_dep, catch2_main_dep],
   include_directories : incdir
 )
 
 # Register tests
-test('CASM Tests', test_exe, protocol: 'tap')
+test('CASM Assembler Tests', test_exe, protocol: 'tap')

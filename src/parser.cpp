@@ -1,495 +1,683 @@
 /**
  * @file parser.cpp
- * @brief Implementation of parser for CASM assembly language
+ * @brief Implementation of CASM parser
  */
 
 #include "casm/parser.hpp"
-#include <sstream>
-#include <unordered_map>
-#include <algorithm>
+#include <cstring>
+#include <cstdio>
+#include <cstdarg>
+#include <cctype>
 
 namespace casm {
 
-// InstructionOperand static methods
-InstructionOperand InstructionOperand::createRegister(uint32_t reg, coil::ValueType vtype) {
-  InstructionOperand op;
-  op.type = Type::Register;
-  op.valueType = vtype;
-  op.reg = reg;
-  return op;
+// Default error callback function
+static void defaultErrorCallback(const char* message, size_t line, size_t column, void* user_data) {
+  (void)user_data; // Unused
+  fprintf(stderr, "Error at line %zu, column %zu: %s\n", line, column, message);
 }
 
-InstructionOperand InstructionOperand::createImmediate(int64_t imm, coil::ValueType vtype) {
-  InstructionOperand op;
-  op.type = Type::Immediate;
-  op.valueType = vtype;
-  op.imm = imm;
-  return op;
-}
-
-InstructionOperand InstructionOperand::createFloatImmediate(double imm, coil::ValueType vtype) {
-  InstructionOperand op;
-  op.type = Type::FloatImmediate;
-  op.valueType = vtype;
-  op.fpImm = imm;
-  return op;
-}
-
-InstructionOperand InstructionOperand::createMemory(uint32_t base, int32_t offset, coil::ValueType vtype) {
-  InstructionOperand op;
-  op.type = Type::Memory;
-  op.valueType = vtype;
-  op.mem.base = base;
-  op.mem.offset = offset;
-  return op;
-}
-
-InstructionOperand InstructionOperand::createLabel(const std::string& name) {
-  InstructionOperand op;
-  op.type = Type::Label;
-  op.valueType = coil::ValueType::Void;
-  op.labelName = name;
-  return op;
-}
-
-// Parser constructor
-Parser::Parser(const std::vector<Token>& tokens)
-  : tokens(tokens), current(0) {
-  initMaps();
-}
-
-// Initialize opcode, flag, and type maps
-void Parser::initMaps() {
+Parser::Parser() 
+  : error_callback(defaultErrorCallback), 
+    error_user_data(nullptr) {
   // Initialize opcode map
-  opcodeMap["nop"] = coil::Opcode::Nop;
-  opcodeMap["br"] = coil::Opcode::Br;
-  opcodeMap["jump"] = coil::Opcode::Jump;
-  opcodeMap["call"] = coil::Opcode::Call;
-  opcodeMap["ret"] = coil::Opcode::Ret;
-  opcodeMap["load"] = coil::Opcode::Load;
-  opcodeMap["store"] = coil::Opcode::Store;
-  opcodeMap["push"] = coil::Opcode::Push;
-  opcodeMap["pop"] = coil::Opcode::Pop;
-  opcodeMap["add"] = coil::Opcode::Add;
-  opcodeMap["sub"] = coil::Opcode::Sub;
-  opcodeMap["mul"] = coil::Opcode::Mul;
-  opcodeMap["div"] = coil::Opcode::Div;
-  opcodeMap["rem"] = coil::Opcode::Rem;
-  opcodeMap["inc"] = coil::Opcode::Inc;
-  opcodeMap["dec"] = coil::Opcode::Dec;
-  opcodeMap["and"] = coil::Opcode::And;
-  opcodeMap["or"] = coil::Opcode::Or;
-  opcodeMap["xor"] = coil::Opcode::Xor;
-  opcodeMap["not"] = coil::Opcode::Not;
-  opcodeMap["shl"] = coil::Opcode::Shl;
-  opcodeMap["shr"] = coil::Opcode::Shr;
-  opcodeMap["sar"] = coil::Opcode::Sar;
-  opcodeMap["cmp"] = coil::Opcode::Cmp;
-  opcodeMap["test"] = coil::Opcode::Test;
+  opcode_map["nop"] = coil::Opcode::Nop;
+  opcode_map["br"] = coil::Opcode::Br;
+  opcode_map["jump"] = coil::Opcode::Jump;
+  opcode_map["call"] = coil::Opcode::Call;
+  opcode_map["ret"] = coil::Opcode::Ret;
   
-  // Initialize flag map
-  flagMap["eq"] = coil::InstrFlag0::EQ;
-  flagMap["neq"] = coil::InstrFlag0::NEQ;
-  flagMap["gt"] = coil::InstrFlag0::GT;
-  flagMap["gte"] = coil::InstrFlag0::GTE;
-  flagMap["lt"] = coil::InstrFlag0::LT;
-  flagMap["lte"] = coil::InstrFlag0::LTE;
+  opcode_map["load"] = coil::Opcode::Load;
+  opcode_map["store"] = coil::Opcode::Store;
+  opcode_map["push"] = coil::Opcode::Push;
+  opcode_map["pop"] = coil::Opcode::Pop;
+  
+  opcode_map["add"] = coil::Opcode::Add;
+  opcode_map["sub"] = coil::Opcode::Sub;
+  opcode_map["mul"] = coil::Opcode::Mul;
+  opcode_map["div"] = coil::Opcode::Div;
+  opcode_map["rem"] = coil::Opcode::Rem;
+  opcode_map["inc"] = coil::Opcode::Inc;
+  opcode_map["dec"] = coil::Opcode::Dec;
+  
+  opcode_map["and"] = coil::Opcode::And;
+  opcode_map["or"] = coil::Opcode::Or;
+  opcode_map["xor"] = coil::Opcode::Xor;
+  opcode_map["not"] = coil::Opcode::Not;
+  opcode_map["shl"] = coil::Opcode::Shl;
+  opcode_map["shr"] = coil::Opcode::Shr;
+  opcode_map["sar"] = coil::Opcode::Sar;
+  
+  opcode_map["cmp"] = coil::Opcode::Cmp;
+  opcode_map["test"] = coil::Opcode::Test;
+  
+  // Initialize condition map
+  condition_map["eq"] = coil::InstrFlag0::EQ;
+  condition_map["neq"] = coil::InstrFlag0::NEQ;
+  condition_map["gt"] = coil::InstrFlag0::GT;
+  condition_map["gte"] = coil::InstrFlag0::GTE;
+  condition_map["lt"] = coil::InstrFlag0::LT;
+  condition_map["lte"] = coil::InstrFlag0::LTE;
   
   // Initialize type map
-  typeMap["i8"] = coil::ValueType::I8;
-  typeMap["i16"] = coil::ValueType::I16;
-  typeMap["i32"] = coil::ValueType::I32;
-  typeMap["i64"] = coil::ValueType::I64;
-  typeMap["u8"] = coil::ValueType::U8;
-  typeMap["u16"] = coil::ValueType::U16;
-  typeMap["u32"] = coil::ValueType::U32;
-  typeMap["u64"] = coil::ValueType::U64;
-  typeMap["f32"] = coil::ValueType::F32;
-  typeMap["f64"] = coil::ValueType::F64;
-  typeMap["ptr"] = coil::ValueType::Ptr;
-  typeMap["void"] = coil::ValueType::Void;
+  type_map["i8"] = coil::ValueType::I8;
+  type_map["i16"] = coil::ValueType::I16;
+  type_map["i32"] = coil::ValueType::I32;
+  type_map["i64"] = coil::ValueType::I64;
+  
+  type_map["u8"] = coil::ValueType::U8;
+  type_map["u16"] = coil::ValueType::U16;
+  type_map["u32"] = coil::ValueType::U32;
+  type_map["u64"] = coil::ValueType::U64;
+  
+  type_map["f32"] = coil::ValueType::F32;
+  type_map["f64"] = coil::ValueType::F64;
+  
+  type_map["ptr"] = coil::ValueType::Ptr;
 }
 
-// Parse tokens into statements
-std::vector<std::unique_ptr<Statement>> Parser::parse() {
-  std::vector<std::unique_ptr<Statement>> statements;
+Parser::~Parser() {
+  // Nothing to clean up
+}
+
+Result Parser::parseLine(const std::string& line, size_t line_number, Line& parsed_line) {
+  std::vector<Token> tokens;
   
-  // Keep parsing until end of file
-  while (!isAtEnd()) {
-    try {
-      auto statement = parseStatement();
-      if (statement) {
-        statements.push_back(std::move(statement));
+  // Tokenize the line
+  Result result = tokenize(line, line_number, tokens);
+  if (result != Result::Success) {
+    return result;
+  }
+  
+  // Skip empty lines and comments
+  if (tokens.empty() || tokens[0].type == TokenType::Comment) {
+    parsed_line = Line(); // Empty line
+    return Result::Success;
+  }
+  
+  // Parse the line
+  size_t token_index = 0;
+  std::string label;
+  
+  // Check for a label
+  if (token_index < tokens.size() && tokens[token_index].type == TokenType::Identifier && 
+      token_index + 1 < tokens.size() && tokens[token_index + 1].type == TokenType::Colon) {
+    label = tokens[token_index].text;
+    token_index += 2; // Skip label and colon
+    
+    // If only a label on the line, create a label-only line
+    if (token_index >= tokens.size() || tokens[token_index].type == TokenType::Comment) {
+      parsed_line = Line::makeLabel(label, line_number);
+      return Result::Success;
+    }
+  }
+  
+  // Check for directive or instruction
+  if (token_index < tokens.size()) {
+    if (tokens[token_index].type == TokenType::Directive) {
+      // Parse directive
+      Directive* directive = new Directive();
+      directive->line = line_number;
+      result = parseDirective(tokens, token_index, *directive);
+      
+      if (result != Result::Success) {
+        delete directive;
+        return result;
       }
-    } catch (const std::exception& e) {
-      // Log error and synchronize
-      error(peek(), e.what());
-      synchronize();
-    }
-  }
-  
-  return statements;
-}
-
-// Get parsing errors
-const std::vector<std::string>& Parser::getErrors() const {
-  return errors;
-}
-
-// Parse a single statement
-std::unique_ptr<Statement> Parser::parseStatement() {
-  // Skip newlines
-  while (match(TokenType::Newline)) {
-    // Just consume the token
-  }
-  
-  // Check for end of file
-  if (check(TokenType::EndOfFile)) {
-    advance(); // Consume EOF
-    return nullptr;
-  }
-  
-  // Check for different statement types
-  if (check(TokenType::Directive)) {
-    Token directiveToken = peek();
-    
-    // Check if this is a section directive
-    if (directiveToken.value == ".section") {
-      advance(); // Consume .section
-      return parseSection();
-    }
-    
-    // Other directives
-    return parseDirective();
-  }
-  
-  // Check for label definition
-  if (check(TokenType::Identifier) && peekNext().type == TokenType::Colon) {
-    return parseLabel();
-  }
-  
-  // Must be an instruction
-  return parseInstruction();
-}
-
-// Parse a section statement
-std::unique_ptr<SectionStatement> Parser::parseSection() {
-  // The section name could be either an Identifier (if it doesn't start with a period)
-  // or a Directive (if it does start with a period, like .text, .data, etc.)
-  Token name;
-  
-  if (check(TokenType::Identifier)) {
-    name = consume(TokenType::Identifier, "Expected section name after .section");
-  } else if (check(TokenType::Directive)) {
-    name = consume(TokenType::Directive, "Expected section name after .section");
-  } else {
-    error(peek(), "Expected section name after .section");
-    throw std::runtime_error("Expected section name after .section");
-  }
-  
-  // Create section statement
-  return std::make_unique<SectionStatement>(name.value, name.line);
-}
-
-// Parse a label statement
-std::unique_ptr<LabelStatement> Parser::parseLabel() {
-  // Get label name
-  Token name = consume(TokenType::Identifier, "Expected label name");
-  
-  // Consume colon
-  consume(TokenType::Colon, "Expected ':' after label name");
-  
-  // Create label statement
-  return std::make_unique<LabelStatement>(name.value, name.line);
-}
-
-// Parse an instruction statement
-std::unique_ptr<InstructionStatement> Parser::parseInstruction() {
-  // Get opcode
-  Token opcodeToken = consume(TokenType::Identifier, "Expected instruction opcode");
-  std::string opcode = opcodeToken.value;
-  
-  // Default values
-  coil::InstrFlag0 flag = coil::InstrFlag0::None;
-  coil::ValueType valueType = coil::ValueType::I32; // Default type
-  
-  // Check for type or flag suffix in the opcode (e.g., br.lte)
-  size_t dotPos = opcode.find('.');
-  if (dotPos != std::string::npos) {
-    // Extract the flag or type suffix
-    std::string suffix = opcode.substr(dotPos + 1);
-    opcode = opcode.substr(0, dotPos);
-    
-    // Check if it's a type
-    auto typeIt = typeMap.find(suffix);
-    if (typeIt != typeMap.end()) {
-      valueType = typeIt->second;
+      
+      parsed_line = Line::makeDirective(label, directive, line_number);
+    } else if (tokens[token_index].type == TokenType::Identifier) {
+      // Parse instruction
+      Instruction* instruction = new Instruction();
+      instruction->line = line_number;
+      result = parseInstruction(tokens, token_index, *instruction);
+      
+      if (result != Result::Success) {
+        delete instruction;
+        return result;
+      }
+      
+      parsed_line = Line::makeInstruction(label, instruction, line_number);
     } else {
-      // Must be a flag
-      auto flagIt = flagMap.find(suffix);
-      if (flagIt != flagMap.end()) {
-        flag = flagIt->second;
-      } else {
-        std::stringstream ss;
-        ss << "Unknown suffix: " << suffix;
-        throw std::runtime_error(ss.str());
-      }
+      formatError("Expected directive or instruction, got '%s'", tokens[token_index].text.c_str());
+      reportError(error_buffer, line_number, tokens[token_index].column);
+      return Result::InvalidFormat;
     }
   }
-  // Also check for explicit type or flag suffix with a period token
-  else if (match(TokenType::Period)) {
-    Token suffix = consume(TokenType::Identifier, "Expected type or flag after '.'");
+  
+  return Result::Success;
+}
+
+void Parser::setErrorCallback(void (*callback)(const char* message, size_t line, size_t column, void* user_data), void* user_data) {
+  error_callback = callback ? callback : defaultErrorCallback;
+  error_user_data = user_data;
+}
+
+const std::string& Parser::getLastError() const {
+  return last_error;
+}
+
+Result Parser::tokenize(const std::string& line, size_t line_number, std::vector<Token>& tokens) {
+  tokens.clear();
+  
+  size_t pos = 0;
+  size_t len = line.length();
+  
+  while (pos < len) {
+    char c = line[pos];
     
-    // Check if it's a type
-    auto typeIt = typeMap.find(suffix.value);
-    if (typeIt != typeMap.end()) {
-      valueType = typeIt->second;
-    } else {
-      // Must be a flag
-      auto flagIt = flagMap.find(suffix.value);
-      if (flagIt != flagMap.end()) {
-        flag = flagIt->second;
-      } else {
-        std::stringstream ss;
-        ss << "Unknown suffix: " << suffix.value;
-        throw std::runtime_error(ss.str());
-      }
+    // Skip whitespace
+    if (isspace(c)) {
+      pos++;
+      continue;
     }
+    
+    // Handle comments
+    if (c == ';') {
+      Token token;
+      token.type = TokenType::Comment;
+      token.text = line.substr(pos);
+      token.line = line_number;
+      token.column = pos + 1;
+      tokens.push_back(token);
+      
+      // Comment runs to end of line
+      break;
+    }
+    
+    // Handle directives (start with .)
+    if (c == '.') {
+      size_t start = pos;
+      pos++; // Skip the .
+      
+      while (pos < len && (isalnum(line[pos]) || line[pos] == '_')) {
+        pos++;
+      }
+      
+      Token token;
+      token.type = TokenType::Directive;
+      token.text = line.substr(start, pos - start);
+      token.line = line_number;
+      token.column = start + 1;
+      tokens.push_back(token);
+      
+      continue;
+    }
+    
+    // Handle identifiers and registers
+    if (isalpha(c) || c == '_') {
+      size_t start = pos;
+      
+      // Check if this is a register (r0, r1, etc.)
+      bool is_register = (c == 'r' && pos + 1 < len && isdigit(line[pos + 1]));
+      
+      pos++; // Skip first character
+      
+      // For identifiers, include letters, digits, underscores
+      // For registers, only include digits and type suffix (.i32, .f64, etc.)
+      if (is_register) {
+        // Get register number
+        while (pos < len && isdigit(line[pos])) {
+          pos++;
+        }
+        
+        // Check for type suffix
+        if (pos < len && line[pos] == '.') {
+          pos++; // Skip the dot
+          
+          // Parse type (i32, f64, etc.)
+          while (pos < len && (isalnum(line[pos]) || line[pos] == '_')) {
+            pos++;
+          }
+        }
+      } else {
+        // Parse identifier
+        while (pos < len && (isalnum(line[pos]) || line[pos] == '_')) {
+          pos++;
+        }
+      }
+      
+      Token token;
+      token.type = is_register ? TokenType::Register : TokenType::Identifier;
+      token.text = line.substr(start, pos - start);
+      token.line = line_number;
+      token.column = start + 1;
+      tokens.push_back(token);
+      
+      continue;
+    }
+    
+    // Handle numbers
+    if (isdigit(c) || (c == '-' && pos + 1 < len && isdigit(line[pos + 1]))) {
+      size_t start = pos;
+      bool is_float = false;
+      
+      // Handle negative sign
+      if (c == '-') {
+        pos++;
+      }
+      
+      // Parse integer part
+      while (pos < len && isdigit(line[pos])) {
+        pos++;
+      }
+      
+      // Check for hexadecimal or binary prefix
+      if (start + 1 < pos && line[start] == '0' && (line[start + 1] == 'x' || line[start + 1] == 'b')) {
+        // Parse hex or binary number
+        char prefix = line[start + 1];
+        
+        if (prefix == 'x') {
+          // Hexadecimal
+          while (pos < len && isxdigit(line[pos])) {
+            pos++;
+          }
+        } else {
+          // Binary
+          while (pos < len && (line[pos] == '0' || line[pos] == '1')) {
+            pos++;
+          }
+        }
+      } else {
+        // Check for floating point
+        if (pos < len && line[pos] == '.') {
+          is_float = true;
+          pos++; // Skip the decimal point
+          
+          // Parse fractional part
+          while (pos < len && isdigit(line[pos])) {
+            pos++;
+          }
+        }
+        
+        // Check for exponent
+        if (pos < len && (line[pos] == 'e' || line[pos] == 'E')) {
+          is_float = true;
+          pos++; // Skip the exponent marker
+          
+          // Handle sign
+          if (pos < len && (line[pos] == '+' || line[pos] == '-')) {
+            pos++;
+          }
+          
+          // Parse exponent
+          while (pos < len && isdigit(line[pos])) {
+            pos++;
+          }
+        }
+      }
+      
+      Token token;
+      token.type = is_float ? TokenType::Float : TokenType::Integer;
+      token.text = line.substr(start, pos - start);
+      token.line = line_number;
+      token.column = start + 1;
+      tokens.push_back(token);
+      
+      continue;
+    }
+    
+    // Handle string literals
+    if (c == '"' || c == '\'') {
+      char quote = c;
+      size_t start = pos;
+      pos++; // Skip opening quote
+      
+      // Find closing quote
+      bool escaped = false;
+      while (pos < len) {
+        if (escaped) {
+          escaped = false;
+        } else if (line[pos] == '\\') {
+          escaped = true;
+        } else if (line[pos] == quote) {
+          break;
+        }
+        pos++;
+      }
+      
+      if (pos >= len) {
+        formatError("Unterminated string literal");
+        reportError(error_buffer, line_number, start + 1);
+        return Result::InvalidFormat;
+      }
+      
+      pos++; // Skip closing quote
+      
+      Token token;
+      token.type = TokenType::String;
+      token.text = line.substr(start, pos - start);
+      token.line = line_number;
+      token.column = start + 1;
+      tokens.push_back(token);
+      
+      continue;
+    }
+    
+    // Handle special characters
+    TokenType type = TokenType::Invalid;
+    switch (c) {
+      case '[': type = TokenType::LBracket; break;
+      case ']': type = TokenType::RBracket; break;
+      case '+': type = TokenType::Plus; break;
+      case '-': type = TokenType::Minus; break;
+      case ',': type = TokenType::Comma; break;
+      case ':': type = TokenType::Colon; break;
+    }
+    
+    if (type != TokenType::Invalid) {
+      Token token;
+      token.type = type;
+      token.text = std::string(1, c);
+      token.line = line_number;
+      token.column = pos + 1;
+      tokens.push_back(token);
+      pos++;
+      continue;
+    }
+    
+    // Unknown character
+    formatError("Unexpected character: '%c'", c);
+    reportError(error_buffer, line_number, pos + 1);
+    return Result::InvalidFormat;
   }
+  
+  return Result::Success;
+}
+
+Result Parser::parseLabel(const std::vector<Token>& tokens, size_t& index, std::string& label) {
+  if (index >= tokens.size() || tokens[index].type != TokenType::Identifier) {
+    formatError("Expected label identifier");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  label = tokens[index].text;
+  index++;
+  
+  if (index >= tokens.size() || tokens[index].type != TokenType::Colon) {
+    formatError("Expected colon after label");
+    reportError(error_buffer, tokens[index - 1].line, tokens[index - 1].column);
+    return Result::InvalidFormat;
+  }
+  
+  index++;
+  return Result::Success;
+}
+
+Result Parser::parseInstruction(const std::vector<Token>& tokens, size_t& index, Instruction& instruction) {
+  if (index >= tokens.size() || tokens[index].type != TokenType::Identifier) {
+    formatError("Expected instruction mnemonic");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  // Split instruction mnemonic and condition
+  std::string mnemonic = tokens[index].text;
+  std::string condition;
+  
+  size_t dot_pos = mnemonic.find('.');
+  if (dot_pos != std::string::npos) {
+    condition = mnemonic.substr(dot_pos + 1);
+    mnemonic = mnemonic.substr(0, dot_pos);
+  }
+  
+  instruction.name = mnemonic;
+  instruction.condition = condition;
+  index++;
   
   // Parse operands
-  std::vector<InstructionOperand> operands;
-  
-  // Skip newline
-  if (!check(TokenType::Newline) && !check(TokenType::EndOfFile)) {
-    // Parse first operand
-    operands.push_back(parseOperand());
+  while (index < tokens.size() && tokens[index].type != TokenType::Comment) {
+    Operand operand;
+    Result result = parseOperand(tokens, index, operand);
+    if (result != Result::Success) {
+      return result;
+    }
     
-    // Parse additional operands
-    while (match(TokenType::Comma)) {
-      operands.push_back(parseOperand());
+    instruction.operands.push_back(operand);
+    
+    // Skip comma if present
+    if (index < tokens.size() && tokens[index].type == TokenType::Comma) {
+      index++;
     }
   }
   
-  // Create instruction statement
-  return std::make_unique<InstructionStatement>(
-    opcode,
-    flag,
-    operands,
-    valueType,
-    opcodeToken.line
-  );
+  return Result::Success;
 }
 
-// Parse a directive statement
-std::unique_ptr<DirectiveStatement> Parser::parseDirective() {
-  // Get directive name
-  Token directiveToken = consume(TokenType::Directive, "Expected directive");
-  std::string name = directiveToken.value;
+Result Parser::parseDirective(const std::vector<Token>& tokens, size_t& index, Directive& directive) {
+  if (index >= tokens.size() || tokens[index].type != TokenType::Directive) {
+    formatError("Expected directive");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
   
-  // Parse arguments
-  std::vector<std::string> args;
+  directive.name = tokens[index].text;
+  index++;
   
-  // Skip newline
-  if (!check(TokenType::Newline) && !check(TokenType::EndOfFile)) {
-    // Parse arguments
-    Token arg = advance();
-    args.push_back(arg.value);
+  // Parse directive arguments
+  while (index < tokens.size() && tokens[index].type != TokenType::Comment) {
+    directive.args.push_back(tokens[index]);
+    index++;
     
-    // Parse additional arguments
-    while (match(TokenType::Comma)) {
-      arg = advance();
-      args.push_back(arg.value);
+    // Skip comma if present
+    if (index < tokens.size() && tokens[index].type == TokenType::Comma) {
+      index++;
     }
   }
   
-  // Create directive statement
-  return std::make_unique<DirectiveStatement>(
-    name,
-    args,
-    directiveToken.line
-  );
+  return Result::Success;
 }
 
-// Parse an instruction operand
-InstructionOperand Parser::parseOperand() {
-  // Register operand
-  if (match(TokenType::Register)) {
-    Token regToken = tokens[current - 1];
-    
-    // Extract register number
-    std::string regStr = regToken.value.substr(1); // Skip 'r'
-    uint32_t reg = std::stoi(regStr);
-    
-    return InstructionOperand::createRegister(reg, coil::ValueType::I32);
+Result Parser::parseOperand(const std::vector<Token>& tokens, size_t& index, Operand& operand) {
+  if (index >= tokens.size()) {
+    formatError("Unexpected end of line while parsing operand");
+    reportError(error_buffer, tokens.back().line, tokens.back().column);
+    return Result::InvalidFormat;
   }
   
-  // Memory operand
-  if (match(TokenType::LBracket)) {
-    // Base register
-    Token baseToken = consume(TokenType::Register, "Expected register in memory operand");
-    
-    // Extract register number
-    std::string baseStr = baseToken.value.substr(1); // Skip 'r'
-    uint32_t base = std::stoi(baseStr);
-    
-    // Check for offset
-    int32_t offset = 0;
-    if (match(TokenType::Plus)) {
-      // Positive offset
-      Token offsetToken = consume(TokenType::Integer, "Expected offset after '+'");
-      offset = std::stoi(offsetToken.value);
-    } else if (match(TokenType::Minus)) {
-      // Negative offset
-      Token offsetToken = consume(TokenType::Integer, "Expected offset after '-'");
-      offset = -std::stoi(offsetToken.value);
+  // Check operand type
+  switch (tokens[index].type) {
+    case TokenType::Register: {
+      // Register operand
+      RegisterRef reg;
+      Result result = parseRegister(tokens, index, reg);
+      if (result != Result::Success) {
+        return result;
+      }
+      
+      operand = Operand::makeRegister(reg.number, reg.type, reg.has_explicit_type);
+      return Result::Success;
     }
     
-    // Closing bracket
-    consume(TokenType::RBracket, "Expected ']' after memory operand");
+    case TokenType::LBracket: {
+      // Memory operand
+      MemoryRef mem;
+      Result result = parseMemory(tokens, index, mem);
+      if (result != Result::Success) {
+        return result;
+      }
+      
+      operand = Operand::makeMemory(mem.base, mem.offset, mem.type);
+      return Result::Success;
+    }
     
-    return InstructionOperand::createMemory(base, offset, coil::ValueType::I32);
+    case TokenType::Integer:
+    case TokenType::Float: {
+      // Immediate operand
+      Result result = parseImmediate(tokens, index, operand);
+      if (result != Result::Success) {
+        return result;
+      }
+      
+      return Result::Success;
+    }
+    
+    case TokenType::String: {
+      // String literal (for directives)
+      formatError("String literals not allowed as operands");
+      reportError(error_buffer, tokens[index].line, tokens[index].column);
+      return Result::InvalidFormat;
+    }
+    
+    case TokenType::Identifier: {
+      // Label reference
+      operand = Operand::makeLabel(tokens[index].text);
+      index++;
+      return Result::Success;
+    }
+    
+    default:
+      formatError("Unexpected token in operand: '%s'", tokens[index].text.c_str());
+      reportError(error_buffer, tokens[index].line, tokens[index].column);
+      return Result::InvalidFormat;
+  }
+}
+
+Result Parser::parseRegister(const std::vector<Token>& tokens, size_t& index, RegisterRef& reg) {
+  if (index >= tokens.size() || tokens[index].type != TokenType::Register) {
+    formatError("Expected register");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
   }
   
-  // Immediate integer operand
-  if (match(TokenType::Integer)) {
-    Token immToken = tokens[current - 1];
+  std::string reg_text = tokens[index].text;
+  index++;
+  
+  // Parse register number and type
+  if (reg_text.size() < 2 || reg_text[0] != 'r' || !isdigit(reg_text[1])) {
+    formatError("Invalid register format: '%s'", reg_text.c_str());
+    reportError(error_buffer, tokens[index - 1].line, tokens[index - 1].column);
+    return Result::InvalidFormat;
+  }
+  
+  // Extract register number
+  size_t type_pos = reg_text.find('.');
+  std::string num_str = reg_text.substr(1, type_pos == std::string::npos ? std::string::npos : type_pos - 1);
+  
+  reg.number = std::stoul(num_str);
+  reg.type = coil::ValueType::I32; // Default type
+  reg.has_explicit_type = false;
+  
+  // Extract register type if specified
+  if (type_pos != std::string::npos) {
+    std::string type_str = reg_text.substr(type_pos + 1);
+    auto it = type_map.find(type_str);
+    if (it == type_map.end()) {
+      formatError("Unknown register type: '%s'", type_str.c_str());
+      reportError(error_buffer, tokens[index - 1].line, tokens[index - 1].column);
+      return Result::InvalidFormat;
+    }
+    
+    reg.type = it->second;
+    reg.has_explicit_type = true;
+  }
+  
+  return Result::Success;
+}
+
+Result Parser::parseMemory(const std::vector<Token>& tokens, size_t& index, MemoryRef& mem) {
+  if (index >= tokens.size() || tokens[index].type != TokenType::LBracket) {
+    formatError("Expected '[' for memory reference");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  index++; // Skip [
+  
+  // Parse base register
+  if (index >= tokens.size() || tokens[index].type != TokenType::Register) {
+    formatError("Expected register as base for memory reference");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  Result result = parseRegister(tokens, index, mem.base);
+  if (result != Result::Success) {
+    return result;
+  }
+  
+  // Default offset and type
+  mem.offset = 0;
+  mem.type = mem.base.type;
+  
+  // Check for offset
+  if (index < tokens.size() && (tokens[index].type == TokenType::Plus || tokens[index].type == TokenType::Minus)) {
+    bool is_negative = tokens[index].type == TokenType::Minus;
+    index++; // Skip +/-
+    
+    if (index >= tokens.size() || tokens[index].type != TokenType::Integer) {
+      formatError("Expected integer offset after '%s'", is_negative ? "-" : "+");
+      reportError(error_buffer, tokens[index].line, tokens[index].column);
+      return Result::InvalidFormat;
+    }
+    
+    int32_t offset = std::stoi(tokens[index].text);
+    mem.offset = is_negative ? -offset : offset;
+    index++; // Skip offset
+  }
+  
+  // Check for closing bracket
+  if (index >= tokens.size() || tokens[index].type != TokenType::RBracket) {
+    formatError("Expected ']' to close memory reference");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  index++; // Skip ]
+  return Result::Success;
+}
+
+Result Parser::parseImmediate(const std::vector<Token>& tokens, size_t& index, Operand& imm) {
+  if (index >= tokens.size() || (tokens[index].type != TokenType::Integer && tokens[index].type != TokenType::Float)) {
+    formatError("Expected immediate value");
+    reportError(error_buffer, tokens[index].line, tokens[index].column);
+    return Result::InvalidFormat;
+  }
+  
+  if (tokens[index].type == TokenType::Integer) {
+    // Parse integer
+    std::string int_str = tokens[index].text;
     int64_t value;
     
-    // Parse different integer formats
-    if (immToken.value.size() >= 2 && immToken.value.substr(0, 2) == "0x") {
-      // Hexadecimal
-      value = std::stoll(immToken.value, nullptr, 16);
-    } else if (immToken.value.size() >= 2 && immToken.value.substr(0, 2) == "0b") {
-      // Binary
-      value = std::stoll(immToken.value.substr(2), nullptr, 2);
+    // Check for hex or binary prefix
+    if (int_str.size() > 2 && int_str[0] == '0') {
+      if (int_str[1] == 'x') {
+        // Hexadecimal
+        value = std::stoll(int_str, nullptr, 16);
+      } else if (int_str[1] == 'b') {
+        // Binary
+        value = std::stoll(int_str.substr(2), nullptr, 2);
+      } else {
+        // Decimal or octal
+        value = std::stoll(int_str);
+      }
     } else {
       // Decimal
-      value = std::stoll(immToken.value);
+      value = std::stoll(int_str);
     }
     
-    return InstructionOperand::createImmediate(value, coil::ValueType::I32);
-  }
-    
-  // Float immediate operand
-  if (match(TokenType::Float)) {
-    Token immToken = tokens[current - 1];
-    double value = std::stod(immToken.value);
-    
-    return InstructionOperand::createFloatImmediate(value, coil::ValueType::F32);
+    imm = Operand::makeImmediate(value);
+  } else {
+    // Parse float
+    double value = std::stod(tokens[index].text);
+    imm = Operand::makeImmediateFloat(value);
   }
   
-  // Label operand (identifier)
-  if (match(TokenType::Identifier)) {
-    Token labelToken = tokens[current - 1];
-    
-    return InstructionOperand::createLabel(labelToken.value);
-  }
-  
-  throw std::runtime_error("Expected operand");
+  index++;
+  return Result::Success;
 }
 
-// Get current token
-Token Parser::peek() const {
-  if (isAtEnd()) {
-    // Return a dummy EOF token
-    Token eofToken;
-    eofToken.type = TokenType::EndOfFile;
-    eofToken.value = "EOF";
-    eofToken.line = 0;
-    eofToken.column = 0;
-    return eofToken;
-  }
-  
-  return tokens[current];
+void Parser::reportError(const char* message, size_t line, size_t column) {
+  last_error = message;
+  error_callback(message, line, column, error_user_data);
 }
 
-// Get next token without advancing
-Token Parser::peekNext() const {
-  if (current + 1 >= tokens.size()) {
-    // Return a dummy EOF token
-    Token eofToken;
-    eofToken.type = TokenType::EndOfFile;
-    eofToken.value = "EOF";
-    eofToken.line = 0;
-    eofToken.column = 0;
-    return eofToken;
-  }
-  
-  return tokens[current + 1];
-}
-
-// Advance to next token
-Token Parser::advance() {
-  if (!isAtEnd()) {
-    current++;
-  }
-  return tokens[current - 1];
-}
-
-// Check if current token matches expected type
-bool Parser::check(TokenType type) const {
-  if (isAtEnd()) {
-    return type == TokenType::EndOfFile;
-  }
-  
-  return peek().type == type;
-}
-
-// Match and consume token if it matches expected type
-bool Parser::match(TokenType type) {
-  if (check(type)) {
-    advance();
-    return true;
-  }
-  
-  return false;
-}
-
-// Consume token of expected type
-Token Parser::consume(TokenType type, const std::string& message) {
-  if (check(type)) {
-    return advance();
-  }
-  
-  error(peek(), message);
-  throw std::runtime_error(message);
-}
-
-// Report an error
-void Parser::error(const Token& token, const std::string& message) {
-  std::stringstream ss;
-  ss << "Line " << token.line << ", Column " << token.column << ": " << message;
-  errors.push_back(ss.str());
-}
-
-// Check if at end of tokens
-bool Parser::isAtEnd() const {
-  return current >= tokens.size();
-}
-
-// Synchronize parser after error
-void Parser::synchronize() {
-  advance();
-  
-  while (!isAtEnd()) {
-    // If we reached end of statement, we're synced
-    if (tokens[current - 1].type == TokenType::Newline) {
-      return;
-    }
-    
-    // Certain tokens indicate start of next statement
-    switch (peek().type) {
-      case TokenType::Directive:
-      case TokenType::Identifier:
-      case TokenType::OpCode:
-        return;
-      default:
-        break;
-    }
-    
-    advance();
-  }
+void Parser::formatError(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  vsnprintf(error_buffer, sizeof(error_buffer), format, args);
+  va_end(args);
 }
 
 } // namespace casm

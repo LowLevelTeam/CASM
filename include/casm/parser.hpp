@@ -1,326 +1,162 @@
 /**
-* @file parser.hpp
-* @brief Parser for CASM assembly language
-*/
+ * @file parser.hpp
+ * @brief CASM parser interface
+ */
 
 #pragma once
-#include "casm/lexer.hpp"
-#include <coil/instr.hpp>
-#include <coil/obj.hpp>
+#include "casm/types.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <memory>
 
 namespace casm {
 
 /**
-* @brief Type of CASM statement
-*/
-enum class StatementType {
-  Section,      ///< Section declaration
-  Label,        ///< Label definition
-  Instruction,  ///< Instruction statement
-  Directive     ///< Assembler directive
-};
-
-/**
-* @brief Base class for CASM statements
-*/
-struct Statement {
-  StatementType type;  ///< Type of statement
-  size_t line;        ///< Line number
-  
-  /**
-  * @brief Virtual destructor
-  */
-  virtual ~Statement() = default;
-  
-  /**
-  * @brief Create a new statement
-  * @param type Statement type
-  * @param line Line number
-  */
-  Statement(StatementType type, size_t line) : type(type), line(line) {}
-};
-
-/**
-* @brief Section declaration statement
-*/
-struct SectionStatement : public Statement {
-  std::string name;  ///< Section name
-  
-  /**
-  * @brief Create a section statement
-  * @param name Section name
-  * @param line Line number
-  */
-  SectionStatement(const std::string& name, size_t line)
-    : Statement(StatementType::Section, line), name(name) {}
-};
-
-/**
-* @brief Label definition statement
-*/
-struct LabelStatement : public Statement {
-  std::string name;  ///< Label name
-  
-  /**
-  * @brief Create a label statement
-  * @param name Label name
-  * @param line Line number
-  */
-  LabelStatement(const std::string& name, size_t line)
-    : Statement(StatementType::Label, line), name(name) {}
-};
-
-/**
-* @brief Operand for an instruction
-*/
-struct InstructionOperand {
-  enum class Type {
-    Register,
-    Immediate,
-    FloatImmediate,
-    Memory,
-    Label
-  };
-  
-  Type type;                     ///< Operand type
-  coil::ValueType valueType;     ///< Value type
-  
-  union {
-    uint32_t reg;                ///< Register number
-    int64_t imm;                 ///< Immediate value
-    double fpImm;                ///< Floating point immediate
-    struct {
-      uint32_t base;             ///< Base register
-      int32_t offset;            ///< Memory offset
-    } mem;                       ///< Memory reference
-  };
-  std::string labelName;         ///< Label name (not in union due to std::string)
-  
-  /**
-  * @brief Create a register operand
-  * @param reg Register number
-  * @param vtype Value type
-  * @return Register operand
-  */
-  static InstructionOperand createRegister(uint32_t reg, coil::ValueType vtype);
-  
-  /**
-  * @brief Create an immediate operand
-  * @param imm Immediate value
-  * @param vtype Value type
-  * @return Immediate operand
-  */
-  static InstructionOperand createImmediate(int64_t imm, coil::ValueType vtype);
-  
-  /**
-  * @brief Create a floating-point immediate operand
-  * @param imm Immediate value
-  * @param vtype Value type
-  * @return Float immediate operand
-  */
-  static InstructionOperand createFloatImmediate(double imm, coil::ValueType vtype);
-  
-  /**
-  * @brief Create a memory operand
-  * @param base Base register
-  * @param offset Memory offset
-  * @param vtype Value type
-  * @return Memory operand
-  */
-  static InstructionOperand createMemory(uint32_t base, int32_t offset, coil::ValueType vtype);
-  
-  /**
-  * @brief Create a label operand
-  * @param name Label name
-  * @return Label operand
-  */
-  static InstructionOperand createLabel(const std::string& name);
-};
-
-/**
-* @brief Instruction statement
-*/
-struct InstructionStatement : public Statement {
-  std::string opcode;                               ///< Instruction opcode
-  coil::InstrFlag0 flag;                            ///< Instruction flag
-  std::vector<InstructionOperand> operands;         ///< Instruction operands
-  coil::ValueType valueType;                        ///< Value type for instruction
-  
-  /**
-  * @brief Create an instruction statement
-  * @param opcode Instruction opcode
-  * @param flag Instruction flag
-  * @param operands Instruction operands
-  * @param valueType Value type for instruction
-  * @param line Line number
-  */
-  InstructionStatement(
-    const std::string& opcode,
-    coil::InstrFlag0 flag,
-    const std::vector<InstructionOperand>& operands,
-    coil::ValueType valueType,
-    size_t line
-  ) : Statement(StatementType::Instruction, line),
-      opcode(opcode), flag(flag), operands(operands),
-      valueType(valueType) {}
-};
-
-/**
-* @brief Directive statement
-*/
-struct DirectiveStatement : public Statement {
-  std::string name;                ///< Directive name
-  std::vector<std::string> args;   ///< Directive arguments
-  
-  /**
-  * @brief Create a directive statement
-  * @param name Directive name
-  * @param args Directive arguments
-  * @param line Line number
-  */
-  DirectiveStatement(
-    const std::string& name,
-    const std::vector<std::string>& args,
-    size_t line
-  ) : Statement(StatementType::Directive, line),
-      name(name), args(args) {}
-};
-
-/**
-* @brief Parser for CASM assembly language
-* 
-* Parses tokenized CASM code into an abstract syntax tree.
-*/
+ * @brief CASM parser class
+ * 
+ * Parses CASM assembly code line by line into instructions and directives.
+ */
 class Parser {
 public:
   /**
-  * @brief Initialize parser with tokens
-  * @param tokens Tokens from lexer
-  */
-  explicit Parser(const std::vector<Token>& tokens);
+   * @brief Constructor
+   */
+  Parser();
   
   /**
-  * @brief Parse tokens into statements
-  * @return Vector of parsed statements
-  */
-  std::vector<std::unique_ptr<Statement>> parse();
+   * @brief Destructor
+   */
+  ~Parser();
   
   /**
-  * @brief Get parsing errors
-  * @return Vector of error messages
-  */
-  const std::vector<std::string>& getErrors() const;
-  
-private:
-  std::vector<Token> tokens;                      ///< Input tokens
-  size_t current;                                 ///< Current token index
-  std::vector<std::string> errors;                ///< Parsing errors
-  std::unordered_map<std::string, coil::Opcode> opcodeMap;  ///< Map of opcode strings to enums
-  std::unordered_map<std::string, coil::InstrFlag0> flagMap;  ///< Map of flag strings to enums
-  std::unordered_map<std::string, coil::ValueType> typeMap;   ///< Map of type strings to enums
+   * @brief Parse a single line of assembly code
+   * @param line Line to parse
+   * @param line_number Line number in source
+   * @return Parsed line
+   */
+  Result parseLine(const std::string& line, size_t line_number, Line& parsed_line);
   
   /**
-  * @brief Initialize opcode, flag, and type maps
-  */
-  void initMaps();
+   * @brief Set error callback function
+   * @param callback Error callback function
+   * @param user_data User data to pass to callback
+   */
+  void setErrorCallback(void (*callback)(const char* message, size_t line, size_t column, void* user_data), void* user_data);
   
   /**
-  * @brief Parse a single statement
-  * @return Parsed statement
-  */
-  std::unique_ptr<Statement> parseStatement();
-  
-  /**
-  * @brief Parse a section statement
-  * @return Parsed section statement
-  */
-  std::unique_ptr<SectionStatement> parseSection();
-  
-  /**
-  * @brief Parse a label statement
-  * @return Parsed label statement
-  */
-  std::unique_ptr<LabelStatement> parseLabel();
-  
-  /**
-  * @brief Parse an instruction statement
-  * @return Parsed instruction statement
-  */
-  std::unique_ptr<InstructionStatement> parseInstruction();
-  
-  /**
-  * @brief Parse a directive statement
-  * @return Parsed directive statement
-  */
-  std::unique_ptr<DirectiveStatement> parseDirective();
-  
-  /**
-  * @brief Parse an instruction operand
-  * @return Parsed operand
-  */
-  InstructionOperand parseOperand();
-  
-  /**
-  * @brief Get current token
-  * @return Current token
-  */
-  Token peek() const;
+   * @brief Get the last error message
+   * @return Last error message
+   */
+  const std::string& getLastError() const;
 
+private:
   /**
-  * @brief Get next token
-  * @return Next token
-  */
-  Token peekNext() const;
+   * @brief Tokenize a line of assembly code
+   * @param line Line to tokenize
+   * @param line_number Line number in source
+   * @param tokens Output vector of tokens
+   * @return Result of tokenization
+   */
+  Result tokenize(const std::string& line, size_t line_number, std::vector<Token>& tokens);
   
   /**
-  * @brief Advance to next token
-  * @return Previous token
-  */
-  Token advance();
+   * @brief Parse a label from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param label Output label
+   * @return Result of parsing
+   */
+  Result parseLabel(const std::vector<Token>& tokens, size_t& index, std::string& label);
   
   /**
-  * @brief Check if current token matches expected type
-  * @param type Expected token type
-  * @return True if matches
-  */
-  bool check(TokenType type) const;
+   * @brief Parse an instruction from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param instruction Output instruction
+   * @return Result of parsing
+   */
+  Result parseInstruction(const std::vector<Token>& tokens, size_t& index, Instruction& instruction);
   
   /**
-  * @brief Match and consume token if it matches expected type
-  * @param type Expected token type
-  * @return True if token consumed
-  */
-  bool match(TokenType type);
+   * @brief Parse a directive from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param directive Output directive
+   * @return Result of parsing
+   */
+  Result parseDirective(const std::vector<Token>& tokens, size_t& index, Directive& directive);
   
   /**
-  * @brief Consume token of expected type
-  * @param type Expected token type
-  * @param message Error message on failure
-  * @return Consumed token
-  */
-  Token consume(TokenType type, const std::string& message);
+   * @brief Parse an operand from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param operand Output operand
+   * @return Result of parsing
+   */
+  Result parseOperand(const std::vector<Token>& tokens, size_t& index, Operand& operand);
   
   /**
-  * @brief Report an error
-  * @param token Token where error occurred
-  * @param message Error message
-  */
-  void error(const Token& token, const std::string& message);
+   * @brief Parse a register reference from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param reg Output register reference
+   * @return Result of parsing
+   */
+  Result parseRegister(const std::vector<Token>& tokens, size_t& index, RegisterRef& reg);
   
   /**
-  * @brief Check if at end of tokens
-  * @return True if at end
-  */
-  bool isAtEnd() const;
+   * @brief Parse a memory reference from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param mem Output memory reference
+   * @return Result of parsing
+   */
+  Result parseMemory(const std::vector<Token>& tokens, size_t& index, MemoryRef& mem);
   
   /**
-  * @brief Synchronize parser after error
-  */
-  void synchronize();
+   * @brief Parse an immediate value from tokens
+   * @param tokens Tokens to parse
+   * @param index Current token index (in/out)
+   * @param imm Output immediate value
+   * @return Result of parsing
+   */
+  Result parseImmediate(const std::vector<Token>& tokens, size_t& index, Operand& imm);
+  
+  /**
+   * @brief Report an error
+   * @param message Error message
+   * @param line Line number
+   * @param column Column number
+   */
+  void reportError(const char* message, size_t line, size_t column);
+  
+  /**
+   * @brief Format an error message
+   * @param format Format string
+   * @param ... Arguments
+   */
+  void formatError(const char* format, ...);
+  
+  // Maps opcode name to COIL opcode
+  std::unordered_map<std::string, coil::Opcode> opcode_map;
+  
+  // Maps condition name to COIL condition flag
+  std::unordered_map<std::string, coil::InstrFlag0> condition_map;
+  
+  // Maps type name to COIL ValueType
+  std::unordered_map<std::string, coil::ValueType> type_map;
+  
+  // Error callback function
+  void (*error_callback)(const char* message, size_t line, size_t column, void* user_data);
+  
+  // User data for error callback
+  void* error_user_data;
+  
+  // Last error message
+  std::string last_error;
+  
+  // Error buffer for formatting
+  char error_buffer[1024];
 };
 
 } // namespace casm
