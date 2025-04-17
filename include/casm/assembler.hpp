@@ -1,139 +1,141 @@
-/**
- * @file assembler.hpp
- * @brief CASM assembler interface
- */
-
 #pragma once
-#include "casm/types.hpp"
 #include "casm/parser.hpp"
-#include "casm/codegen.hpp"
-#include "coil/obj.hpp"
+#include <coil/coil.hpp>
+#include <coil/instr.hpp>
+#include <coil/obj.hpp>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <memory>
 
 namespace casm {
 
 /**
- * @brief CASM assembler configuration
- */
-struct AssemblerConfig {
-  bool verbose;      ///< Enable verbose output
-  bool debug;        ///< Enable debug output
-  
-  AssemblerConfig() : verbose(false), debug(false) {}
-};
-
-/**
- * @brief CASM assembler class
- * 
- * Main assembler interface that coordinates parsing and code generation.
+ * @brief Assembler that converts CASM statements to COIL binary
  */
 class Assembler {
 public:
   /**
-   * @brief Constructor
-   * @param config Assembler configuration
+   * @brief Construct an assembler
    */
-  explicit Assembler(const AssemblerConfig& config = AssemblerConfig());
+  Assembler();
   
   /**
-   * @brief Destructor
+   * @brief Assemble CASM statements into a COIL object file
+   * @param statements Statements to assemble
+   * @return Assembled COIL object
    */
-  ~Assembler();
+  coil::Object assemble(const std::vector<Statement>& statements);
   
   /**
-   * @brief Assemble source code
-   * @param source Source code
-   * @param source_name Source name (for error reporting)
-   * @param obj Output object file
-   * @return Result of assembly
+   * @brief Assemble CASM source code into a COIL object file
+   * @param source Source code to assemble
+   * @param filename Source filename (for error reporting)
+   * @return Assembled COIL object
    */
-  Result assemble(const std::string& source, const std::string& source_name, coil::Object& obj);
+  coil::Object assembleSource(const std::string& source, const std::string& filename = "<input>");
   
   /**
-   * @brief Assemble source file
-   * @param filename Source filename
-   * @param obj Output object file
-   * @return Result of assembly
+   * @brief Get assembler errors
+   * @return Vector of error messages
    */
-  Result assembleFile(const std::string& filename, coil::Object& obj);
+  const std::vector<std::string>& getErrors() const { return m_errors; }
   
   /**
-   * @brief Save object file
-   * @param obj Object file
-   * @param filename Output filename
-   * @return Result of save
+   * @brief Get whether assembler is in verbose mode
+   * @return True if verbose mode is enabled
    */
-  Result saveObjectFile(const coil::Object& obj, const std::string& filename);
+  bool isVerbose() const { return m_verbose; }
   
   /**
-   * @brief Get the last error message
-   * @return Last error message
+   * @brief Set verbose mode
+   * @param verbose True to enable verbose mode
    */
-  const std::string& getLastError() const;
+  void setVerbose(bool verbose) { m_verbose = verbose; }
   
-  /**
-   * @brief Set error callback
-   * @param callback Error callback function
-   * @param user_data User data to pass to callback
-   */
-  void setErrorCallback(void (*callback)(const char* message, size_t line, const char* source, void* user_data), void* user_data);
-
 private:
-  /**
-   * @brief Error callback for parser
-   * @param message Error message
-   * @param line Line number
-   * @param column Column number
-   * @param user_data User data
-   */
-  static void parserErrorCallback(const char* message, size_t line, size_t column, void* user_data);
+  struct SectionContext {
+    std::vector<uint8_t> data;
+    std::unordered_map<std::string, size_t> labels;
+    size_t currentOffset = 0;
+    
+    // Section properties
+    std::string name;
+    coil::SectionType type = coil::SectionType::ProgBits;
+    coil::SectionFlag flags = coil::SectionFlag::None;
+    
+    void addData(const std::vector<uint8_t>& newData) {
+      data.insert(data.end(), newData.begin(), newData.end());
+      currentOffset += newData.size();
+    }
+    
+    void addLabel(const std::string& label) {
+      labels[label] = currentOffset;
+    }
+  };
   
-  /**
-   * @brief Error callback for code generator
-   * @param message Error message
-   * @param line Line number
-   * @param user_data User data
-   */
-  static void codegenErrorCallback(const char* message, size_t line, void* user_data);
+  struct LabelReference {
+    std::string label;        // Label name
+    std::string section;      // Section name
+    size_t offset;            // Offset in section data
+    size_t size;              // Size of reference (in bytes)
+    bool isRelative;          // Whether reference is relative to current position
+  };
   
-  /**
-   * @brief Report an error
-   * @param message Error message
-   * @param line Line number
-   */
-  void reportError(const char* message, size_t line);
+  std::unordered_map<std::string, SectionContext> m_sections;
+  std::string m_currentSection;
+  std::unordered_map<std::string, std::string> m_globalSymbols;  // label -> section
+  std::vector<LabelReference> m_labelReferences;
+  std::vector<std::string> m_errors;
+  bool m_verbose = false;
   
-  /**
-   * @brief Format an error message
-   * @param format Format string
-   * @param ... Arguments
-   */
-  void formatError(const char* format, ...);
+  // First pass - collect labels and section sizes
+  void collectLabels(const std::vector<Statement>& statements);
   
-  // Parser instance
-  Parser parser;
+  // Second pass - generate code
+  void generateCode(const std::vector<Statement>& statements);
   
-  // Code generator instance
-  CodeGenerator codegen;
+  // Helper methods
+  void ensureCurrentSection();
+  void switchSection(const std::string& name);
+  void addLabel(const std::string& label);
+  void addGlobalSymbol(const std::string& label);
+  void addImmediate(const ImmediateValue& value, coil::ValueType type);
+  void addByteImmediate(const ImmediateValue& value);
+  void addShortImmediate(const ImmediateValue& value);
+  void addWordImmediate(const ImmediateValue& value);
+  void addLongImmediate(const ImmediateValue& value);
+  void addFloatImmediate(const ImmediateValue& value);
+  void addDoubleImmediate(const ImmediateValue& value);
+  void addLabelReference(const std::string& label, size_t size, bool isRelative = false);
+  void addString(const std::string& str, bool nullTerminated = false);
   
-  // Assembler configuration
-  AssemblerConfig config;
+  // Convert statement to COIL instruction
+  void processInstruction(const Instruction& instruction, const std::string& label);
   
-  // Current source name
-  std::string current_source;
+  // Process directive
+  void processDirective(const Directive& directive, const std::string& label);
   
-  // Error callback function
-  void (*error_callback)(const char* message, size_t line, const char* source, void* user_data);
+  // Resolve label references
+  void resolveReferences();
   
-  // User data for error callback
-  void* error_user_data;
+  // Convert operand to COIL operand
+  coil::Operand convertOperand(const Operand& operand, coil::ValueType defaultType = coil::ValueType::I32);
   
-  // Last error message
-  std::string last_error;
+  // Get register index from name
+  uint32_t getRegisterIndex(const std::string& name);
   
-  // Error buffer for formatting
-  char error_buffer[1024];
+  // Convert immediate value to COIL value
+  coil::ImmediateValue convertImmediate(const ImmediateValue& value, coil::ValueType type);
+  
+  // Convert value type string to COIL value type
+  coil::ValueType stringToValueType(const std::string& typeStr);
+  
+  // Log an error
+  void error(const std::string& message);
+  
+  // Log a message if verbose mode is enabled
+  void log(const std::string& message);
 };
 
 } // namespace casm

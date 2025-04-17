@@ -1,0 +1,42 @@
+; Calculate factorial of n (recursive implementation)
+; Input value is taken from factorial_input in the data section
+; Result is returned in register r1
+
+.section .text ^ProgBits ^Code ^Alloc
+.global @main
+.global @factorial
+
+#main
+  ; Initialize
+  load %r1, @factorial_input   ; Load input value
+  call @factorial              ; Call factorial function
+  
+  ; Store result
+  store @factorial_result, %r1 ; Store result
+  ret                          ; Return
+
+#factorial
+  ; r1 = input value
+  ; returns factorial in r1
+  cmp %r1, $id0                ; Compare n with 0
+  br ^eq @base_case            ; If n == 0, go to base case
+  
+  ; Factorial(n) = n * Factorial(n-1)
+  push %r1                     ; Save n
+  dec %r1                      ; n-1
+  call @factorial              ; Compute Factorial(n-1)
+  mov %r2, %r1                 ; r2 = Factorial(n-1)
+  pop %r1                      ; Restore n
+  mul %r1, %r1, %r2            ; r1 = n * Factorial(n-1)
+  ret
+  
+#base_case
+  mov %r1, $id1                ; Factorial(0) = 1
+  ret
+
+.section .data ^ProgBits ^Write ^Alloc
+#factorial_input
+  .i32 5                       ; Calculate factorial of 5
+
+#factorial_result
+  .i32 0                       ; Space for result

@@ -1,279 +1,334 @@
-/**
- * @file test_assembler.cpp
- * @brief Tests for the CASM assembler
- */
-
 #include <catch2/catch_test_macros.hpp>
+#include "casm/lexer.hpp"
+#include "casm/parser.hpp"
 #include "casm/assembler.hpp"
-#include "coil/obj.hpp"
-#include "coil/stream.hpp"
+#include <coil/coil.hpp>
+#include <coil/stream.hpp>
 #include <sstream>
+#include <vector>
 
-// Helper function to assemble a string
-static coil::Result assembleString(const std::string& source, coil::Object& obj) {
+// Initialize COIL library for tests
+struct CoilTestFixture {
+  CoilTestFixture() {
+    coil::initialize();
+  }
+  
+  ~CoilTestFixture() {
+    coil::shutdown();
+  }
+};
+
+TEST_CASE_METHOD(CoilTestFixture, "Assembler assembles basic program", "[assembler]") {
+  std::string source = R"(
+    .section .text
+    
+    #main
+      mov %r1, $id42   ; Load constant
+      add %r1, %r1, %r2 ; Add registers
+      ret              ; Return
+  )";
+  
+  // Create assembler
   casm::Assembler assembler;
-  return assembler.assemble(source, "test_source", obj);
+  
+  // Assemble source
+  coil::Object obj = assembler.assembleSource(source, "test.casm");
+  
+  // Check for assembler errors
+  REQUIRE(assembler.getErrors().empty());
+  
+  // The object should have at least one section (.text)
+  CHECK(obj.getSectionCount() > 0);
+  
+  // Check sections
+  coil::u16 textSectionIndex = obj.getSectionIndex(".text");
+  REQUIRE(textSectionIndex > 0);
+  
+  const coil::BaseSection* textSection = obj.getSection(textSectionIndex);
+  REQUIRE(textSection != nullptr);
+  
+  // Text section should have code flag
+  CHECK((textSection->getHeader().flags & static_cast<uint16_t>(coil::SectionFlag::Code)) != 0);
+  
+  // The text section should have data
+  const coil::DataSection* dataSection = dynamic_cast<const coil::DataSection*>(textSection);
+  REQUIRE(dataSection != nullptr);
+  CHECK(!dataSection->getData().empty());
+  
+  // Test string table and symbol table exist
+  CHECK(obj.getStringTable() != nullptr);
+  CHECK(obj.getSymbolTable() != nullptr);
 }
 
-TEST_CASE("Assembler basic functionality", "[assembler]") {
-  SECTION("Empty source") {
-    coil::Object obj;
-    coil::Result result = assembleString("", obj);
-    CHECK(result == coil::Result::Success);
+TEST_CASE_METHOD(CoilTestFixture, "Assembler handles sections and global symbols", "[assembler]") {
+  std::string source = R"(
+    .section .text
+    .global @main
     
-    // Should have created default sections
-    CHECK(obj.getSectionIndex(".text", 5) > 0);
-    CHECK(obj.getSectionIndex(".data", 5) > 0);
-    CHECK(obj.getSectionIndex(".bss", 4) > 0);
-  }
+    #main
+      call @helper
+      ret
+      
+    #helper
+      mov %r1, $id100
+      ret
+      
+    .section .data
+    #constants
+      .i32 1, 2, 3, 4
+      .asciiz "Hello, world!"
+  )";
   
-  SECTION("Simple instruction") {
-    coil::Object obj;
-    coil::Result result = assembleString("add r1, r2, r3", obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check that text section contains our instruction
-    uint16_t text_index = obj.getSectionIndex(".text", 5);
-    REQUIRE(text_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(text_index);
-    REQUIRE(section != nullptr);
-    
-    // Since we can't use dynamic_cast with -fno-rtti, we need to verify the section type
-    CHECK(section->getSectionType() == static_cast<uint8_t>(coil::SectionType::ProgBits));
-    
-    // Check section has data
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() > 0);
-  }
+  // Create assembler
+  casm::Assembler assembler;
+  
+  // Assemble source
+  coil::Object obj = assembler.assembleSource(source, "test.casm");
+  
+  // Check for assembler errors
+  REQUIRE(assembler.getErrors().empty());
+  
+  // Should have .text and .data sections
+  coil::u16 textSectionIndex = obj.getSectionIndex(".text");
+  coil::u16 dataSectionIndex = obj.getSectionIndex(".data");
+  
+  REQUIRE(textSectionIndex > 0);
+  REQUIRE(dataSectionIndex > 0);
+  
+  // Check section types and flags
+  const coil::BaseSection* textSection = obj.getSection(textSectionIndex);
+  const coil::BaseSection* dataSection = obj.getSection(dataSectionIndex);
+  
+  REQUIRE(textSection != nullptr);
+  REQUIRE(dataSection != nullptr);
+  
+  CHECK(textSection->getSectionType() == static_cast<u8>(coil::SectionType::ProgBits));
+  CHECK(dataSection->getSectionType() == static_cast<u8>(coil::SectionType::ProgBits));
+  
+  CHECK((textSection->getHeader().flags & static_cast<uint16_t>(coil::SectionFlag::Code)) != 0);
+  CHECK((dataSection->getHeader().flags & static_cast<uint16_t>(coil::SectionFlag::Write)) != 0);
+  
+  // Check symbol table for main symbol
+  coil::u16 mainSymbolIndex = obj.getSymbolIndex("main");
+  REQUIRE(mainSymbolIndex > 0);
+  
+  const coil::Symbol* mainSymbol = obj.getSymbol(mainSymbolIndex);
+  REQUIRE(mainSymbol != nullptr);
+  
+  CHECK(mainSymbol->section_index == textSectionIndex);
+  CHECK(mainSymbol->binding == static_cast<u8>(coil::SymbolBinding::Global));
+  
+  // Data section should have data
+  const coil::DataSection* dataSecData = dynamic_cast<const coil::DataSection*>(dataSection);
+  REQUIRE(dataSecData != nullptr);
+  CHECK(dataSecData->getData().size() > 16); // At least 4 ints (16 bytes) + string
 }
 
-TEST_CASE("Assembler sections and directives", "[assembler]") {
-  SECTION("Section directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .text\n"
-      "add r1, r2, r3\n"
-      ".section .data\n"
-      ".i32 42\n";
+TEST_CASE_METHOD(CoilTestFixture, "Assembler handles data directives", "[assembler]") {
+  std::string source = R"(
+    .section .data
     
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check text section
-    uint16_t text_index = obj.getSectionIndex(".text", 5);
-    REQUIRE(text_index > 0);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* data_section = obj.getSection(data_index);
-    REQUIRE(data_section != nullptr);
-    CHECK(data_section->getSectionType() == static_cast<uint8_t>(coil::SectionType::ProgBits));
-    
-    // Data section should contain our integer
-    const coil::DataSection* ds = static_cast<const coil::DataSection*>(data_section);
-    CHECK(ds->getSize() >= 4); // At least 4 bytes for i32
-  }
+    ; Integer data
+    #integers
+      .i8  1, -1
+      .i16 1000, -1000
+      .i32 100000, -100000
+      .i64 1000000000000, -1000000000000
+      
+    ; Unsigned integer data
+    #unsigned
+      .u8  255
+      .u16 65535
+      .u32 4294967295
+      .u64 18446744073709551615
+      
+    ; Floating point data
+    #floats
+      .f32 3.14159
+      .f64 2.71828
+      
+    ; String data
+    #strings
+      .ascii "Hello"
+      .asciiz "World"
+      
+    ; Zero data
+    #zeros
+      .zero 10
+  )";
   
-  SECTION("Global directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .text\n"
-      ".global main\n"
-      "main:\n"
-      "  add r1, r2, r3\n"
-      "  ret\n";
-    
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check symbol table
-    REQUIRE(obj.getSymbolTable() != nullptr);
-    
-    // Find main symbol
-    uint16_t main_index = obj.getSymbolIndex("main", 4);
-    REQUIRE(main_index > 0);
-    
-    const coil::Symbol* main_sym = obj.getSymbol(main_index);
-    REQUIRE(main_sym != nullptr);
-    
-    // Main should be global
-    CHECK(main_sym->binding == static_cast<uint8_t>(coil::SymbolBinding::Global));
-  }
+  // Create assembler
+  casm::Assembler assembler;
+  
+  // Assemble source
+  coil::Object obj = assembler.assembleSource(source, "test.casm");
+  
+  // Check for assembler errors
+  REQUIRE(assembler.getErrors().empty());
+  
+  // Should have .data section
+  coil::u16 dataSectionIndex = obj.getSectionIndex(".data");
+  REQUIRE(dataSectionIndex > 0);
+  
+  // Check data section
+  const coil::BaseSection* dataSection = obj.getSection(dataSectionIndex);
+  REQUIRE(dataSection != nullptr);
+  
+  // Data section should have data
+  const coil::DataSection* dataSecData = dynamic_cast<const coil::DataSection*>(dataSection);
+  REQUIRE(dataSecData != nullptr);
+  
+  const std::vector<u8>& data = dataSecData->getData();
+  REQUIRE(!data.empty());
+  
+  // Check section size (rough estimate)
+  // The section should contain:
+  // - 2 i8 values (2 bytes)
+  // - 2 i16 values (4 bytes)
+  // - 2 i32 values (8 bytes)
+  // - 2 i64 values (16 bytes)
+  // - 1 u8 value (1 byte)
+  // - 1 u16 value (2 bytes)
+  // - 1 u32 value (4 bytes)
+  // - 1 u64 value (8 bytes)
+  // - 1 f32 value (4 bytes)
+  // - 1 f64 value (8 bytes)
+  // - "Hello" string (5 bytes)
+  // - "World" string + null terminator (6 bytes)
+  // - Zero padding (10 bytes)
+  // Total: ~78 bytes
+  
+  CHECK(data.size() >= 70);
 }
 
-TEST_CASE("Assembler data directives", "[assembler]") {
-  SECTION("Integer directives") {
-    coil::Object obj;
-    std::string source = 
-      ".section .data\n"
-      ".i8  -128, 127\n"
-      ".i16 -32768, 32767\n"
-      ".i32 -2147483648, 2147483647\n"
-      ".u8  0, 255\n"
-      ".u16 0, 65535\n"
-      ".u32 0, 4294967295\n";
+TEST_CASE_METHOD(CoilTestFixture, "Assembler resolves label references", "[assembler]") {
+  std::string source = R"(
+    .section .text
     
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(data_index);
-    REQUIRE(section != nullptr);
-    
-    // Data section should be sufficiently sized to hold all our integers
-    // (2 * 1) + (2 * 2) + (2 * 4) + (2 * 1) + (2 * 2) + (2 * 4) = 28 bytes
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() >= 28);
-  }
+    #main
+      jmp @loop          ; Jump to loop
+      
+    #data_ref
+      load %r1, @data    ; Load data address
+      ret
+      
+    #loop
+      inc %r1            ; Increment r1
+      cmp %r1, $id10     ; Compare with 10
+      br ^lt @loop       ; Loop if less than 10
+      ret                ; Return
+      
+    .section .data
+    #data
+      .i32 1, 2, 3, 4    ; Some data
+  )";
   
-  SECTION("String directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .data\n"
-      "message: .string \"Hello, world!\"\n";
-    
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(data_index);
-    REQUIRE(section != nullptr);
-    
-    // Data section should contain our string (13 chars + null terminator)
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() >= 14);
-    
-    // Check symbol
-    uint16_t message_index = obj.getSymbolIndex("message", 7);
-    REQUIRE(message_index > 0);
-  }
+  // Create assembler
+  casm::Assembler assembler;
   
-  SECTION("Bytes directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .data\n"
-      ".bytes 0x01, 0x02, 0x03, 0x04\n";
-    
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(data_index);
-    REQUIRE(section != nullptr);
-    
-    // Data section should contain our bytes
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() >= 4);
-  }
+  // Assemble source
+  coil::Object obj = assembler.assembleSource(source, "test.casm");
   
-  SECTION("Space directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .data\n"
-      ".space 100\n";
-    
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(data_index);
-    REQUIRE(section != nullptr);
-    
-    // Data section should contain our reserved space
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() >= 100);
-  }
+  // Check for assembler errors
+  REQUIRE(assembler.getErrors().empty());
   
-  SECTION("Align directive") {
-    coil::Object obj;
-    std::string source = 
-      ".section .data\n"
-      ".bytes 0x01\n"
-      ".align 4\n"
-      ".bytes 0x02\n";
-    
-    coil::Result result = assembleString(source, obj);
-    CHECK(result == coil::Result::Success);
-    
-    // Check data section
-    uint16_t data_index = obj.getSectionIndex(".data", 5);
-    REQUIRE(data_index > 0);
-    
-    const coil::BaseSection* section = obj.getSection(data_index);
-    REQUIRE(section != nullptr);
-    
-    // Data section should be sized to account for alignment
-    const coil::DataSection* data_section = static_cast<const coil::DataSection*>(section);
-    CHECK(data_section->getSize() >= 8); // 1 byte + 3 bytes padding + 1 byte
-  }
+  // Should have .text and .data sections
+  coil::u16 textSectionIndex = obj.getSectionIndex(".text");
+  coil::u16 dataSectionIndex = obj.getSectionIndex(".data");
+  
+  REQUIRE(textSectionIndex > 0);
+  REQUIRE(dataSectionIndex > 0);
+  
+  // Both sections should have data
+  const coil::DataSection* textSection = dynamic_cast<const coil::DataSection*>(obj.getSection(textSectionIndex));
+  const coil::DataSection* dataSection = dynamic_cast<const coil::DataSection*>(obj.getSection(dataSectionIndex));
+  
+  REQUIRE(textSection != nullptr);
+  REQUIRE(dataSection != nullptr);
+  
+  CHECK(!textSection->getData().empty());
+  CHECK(!dataSection->getData().empty());
+  
+  // Assembler should have resolved all references without errors
+  CHECK(assembler.getErrors().empty());
 }
 
-TEST_CASE("Assembler full program", "[assembler]") {
-  // Complete factorial program as a test
-  std::string factorial_program = R"(
-; Calculate factorial of 5
-
-.section .text
-.global main
-
-main:
-  ; Initialize
-  load r1, [factorial_input]  ; Load input value
-  push r1
-  call factorial
-  pop r2                      ; Get result
-  ret
-
-factorial:
-  ; r1 = input value
-  ; returns factorial in r1
-  push r2
-  push r3
+TEST_CASE_METHOD(CoilTestFixture, "Assembler handles complete factorial example", "[assembler]") {
+  std::string source = R"(
+    ; Calculate factorial of n
+    .section .text
+    .global @factorial
+    
+    #factorial
+      ; r1 = input value
+      ; returns factorial in r1
+      cmp %r1, $id0
+      br ^eq @base_case
+      
+      ; Factorial(n) = n * Factorial(n-1)
+      push %r1              ; Save n
+      dec %r1               ; n-1
+      call @factorial       ; Compute Factorial(n-1)
+      mov %r2, %r1          ; r2 = Factorial(n-1)
+      pop %r1               ; Restore n
+      mul %r1, %r1, %r2     ; r1 = n * Factorial(n-1)
+      ret
+      
+    #base_case
+      mov %r1, $id1         ; Factorial(0) = 1
+      ret
+      
+    .section .data
+    #factorial_input
+      .i32 5
+  )";
   
-  mov r2, r1                  ; r2 = n
-  mov r3, 1                   ; r3 = result = 1
+  // Create assembler
+  casm::Assembler assembler;
   
-loop:
-  cmp r2, 0
-  br.eq done                  ; if n == 0, we're done
+  // Assemble source
+  coil::Object obj = assembler.assembleSource(source, "factorial.casm");
   
-  mul r3, r3, r2              ; result *= n
-  dec r2                      ; n--
-  jump loop
+  // Check for assembler errors
+  REQUIRE(assembler.getErrors().empty());
   
-done:
-  mov r1, r3                  ; return result in r1
-  pop r3
-  pop r2
-  ret
-
-.section .data
-factorial_input: .i32 5
-)";
-
-  coil::Object obj;
-  coil::Result result = assembleString(factorial_program, obj);
+  // Should have .text and .data sections
+  coil::u16 textSectionIndex = obj.getSectionIndex(".text");
+  coil::u16 dataSectionIndex = obj.getSectionIndex(".data");
   
-  // The assembly might fail due to missing "mov" instruction in our implementation,
-  // but we're testing the overall process, not the specific implementation details.
-  // In a real-world scenario, we would need to implement all required instructions.
+  REQUIRE(textSectionIndex > 0);
+  REQUIRE(dataSectionIndex > 0);
   
-  // Either way, we should have created an object with sections
-  CHECK(obj.getSectionIndex(".text", 5) > 0);
-  CHECK(obj.getSectionIndex(".data", 5) > 0);
+  // Check symbol table for factorial symbol
+  coil::u16 factorialSymbolIndex = obj.getSymbolIndex("factorial");
+  REQUIRE(factorialSymbolIndex > 0);
+  
+  const coil::Symbol* factorialSymbol = obj.getSymbol(factorialSymbolIndex);
+  REQUIRE(factorialSymbol != nullptr);
+  
+  CHECK(factorialSymbol->section_index == textSectionIndex);
+  CHECK(factorialSymbol->binding == static_cast<u8>(coil::SymbolBinding::Global));
+  
+  // Both sections should have data
+  const coil::DataSection* textSection = dynamic_cast<const coil::DataSection*>(obj.getSection(textSectionIndex));
+  const coil::DataSection* dataSection = dynamic_cast<const coil::DataSection*>(obj.getSection(dataSectionIndex));
+  
+  REQUIRE(textSection != nullptr);
+  REQUIRE(dataSection != nullptr);
+  
+  CHECK(!textSection->getData().empty());
+  CHECK(!dataSection->getData().empty());
+  
+  // Check that data section contains the factorial input value (5)
+  const std::vector<u8>& data = dataSection->getData();
+  REQUIRE(data.size() >= 4); // At least 4 bytes for i32
+  
+  // Check the i32 value if it's 5 (little-endian)
+  if (data.size() >= 4) {
+    uint32_t value = (static_cast<uint32_t>(data[3]) << 24) |
+                     (static_cast<uint32_t>(data[2]) << 16) |
+                     (static_cast<uint32_t>(data[1]) << 8) |
+                     static_cast<uint32_t>(data[0]);
+    CHECK(value == 5);
+  }
 }

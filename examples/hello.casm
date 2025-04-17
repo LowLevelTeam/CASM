@@ -1,0 +1,27 @@
+; Hello World example
+; This is a simple example of a CASM program.
+; Note: This is just a demonstration of the syntax.
+; Actual I/O operations would depend on the target platform's APIs.
+
+.section .text ^ProgBits ^Code ^Alloc
+.global @main
+
+#main
+  ; Load address of hello string
+  mov %r1, @hello_string
+  
+  ; Call print function (platform-specific)
+  ; In a real program, this would call a platform-specific print function
+  call @print
+  
+  ; Return from main
+  ret
+
+#print
+  ; Print function implementation would be platform-specific
+  ; For demonstration purposes, we'll just return
+  ret
+
+.section .data ^ProgBits ^Write ^Alloc
+#hello_string
+  .asciiz "Hello, world!"

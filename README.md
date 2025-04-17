@@ -1,75 +1,93 @@
-# CASM - COIL Assembly Language
+# CASM Assembler
 
-CASM (COIL Assembly) is a lightweight assembler for the COIL (Compiler Optimization & Instruction Library) intermediate representation format. It provides a simple, human-readable assembly language that compiles directly to the COIL binary format.
+CASM (COIL Assembly) is an assembler for the COIL (Computer Oriented Intermediate Language) binary format. It compiles human-readable assembly language into COIL binary objects.
+
+## Overview
+
+CASM provides a simple way to create COIL binaries by writing assembly code. The language syntax is designed for ease of parsing rather than complex features, primarily intended for:
+
+- Creating test binaries for the COIL toolchain
+- Serving as an explicit disassembly format for COIL binaries
+- Providing a reference implementation for COIL code generation
 
 ## Features
 
-- Simple, line-oriented syntax that maps directly to COIL instructions
-- Support for all COIL opcodes and operand types
-- Directives for section definitions, data declarations, and symbols
-- Minimal memory usage with efficient single-pass compilation
-- Complete integration with the COIL library ecosystem
-
-## Design Principles
-
-CASM follows the same design principles as the COIL library:
-
-- **Minimal Allocations**: Avoid heap allocations where possible
-- **Stack First**: Prefer stack allocations and references
-- **Clean API**: Simple, intuitive interfaces
-- **Performance**: Zero-cost abstractions that compile to efficient machine code
-- **Portability**: Works across platforms with consistent behavior
+- Simple, consistent syntax with straightforward token rules
+- Direct mapping to COIL opcodes and object format
+- Support for labels, sections, and symbols
+- Data directives for defining initialized and uninitialized data
+- Full control over COIL binary format features
 
 ## Building
 
+CASM depends on the COIL library (libcoil-dev). Make sure it's installed before building.
+
 ```bash
-meson setup build
+mkdir build
 cd build
-ninja
-```
-
-## Installation
-
-```bash
-ninja install
+cmake ..
+make
 ```
 
 ## Usage
 
-Basic usage:
-
 ```bash
-casm input.casm -o output.coil
+casm [options] input_file output_file
 ```
 
 Options:
-
-```
--o, --output FILE    Specify output file (default is input file with .coil extension)
--v, --verbose        Enable verbose output
--h, --help           Show help message
-```
+- `-h, --help` - Show help message
+- `-v, --verbose` - Enable verbose output
 
 ## Example
 
-```
-; Simple CASM program
+```assembly
+; Simple program that calculates factorial
 .section .text
-.global main
+.global @factorial
 
-main:
-  push r1
-  load r1, [r2+8]
-  add r1, r1, 42
-  store [r2], r1
-  pop r1
+#factorial
+  ; r1 = input value, returns factorial in r1
+  cmp %r1, $id0
+  br ^eq @base_case
+  
+  ; Factorial(n) = n * Factorial(n-1)
+  push %r1              ; Save n
+  dec %r1               ; n-1
+  call @factorial       ; Compute Factorial(n-1)
+  mov %r2, %r1          ; r2 = Factorial(n-1)
+  pop %r1               ; Restore n
+  mul %r1, %r1, %r2     ; r1 = n * Factorial(n-1)
+  ret
+  
+#base_case
+  mov %r1, $id1         ; Factorial(0) = 1
   ret
 ```
 
+## Grammar
+
+For detailed documentation of the CASM language syntax, see the [GRAMMAR.md](GRAMMAR.md) file.
+
+## Architecture
+
+CASM consists of several components:
+
+1. **Lexer**: Tokenizes the CASM source code into a stream of tokens
+2. **Parser**: Converts the token stream into a structured representation
+3. **Assembler**: Generates COIL binary objects from the parsed representation
+
+The assembler performs a two-pass compilation process:
+- First pass: Collect labels and calculate sizes
+- Second pass: Resolve references and generate code
+
+## Integration with COIL
+
+CASM integrates with the COIL library to produce binary objects that conform to the COIL format specification, including:
+- Section-based layout
+- Symbol tables
+- Proper encoding of instructions and operands
+
 ## License
 
-This project is in the public domain. See the LICENSE file for details.
-
-## Documentation
-
-See GRAMMAR.md for detailed language specification.
+This project is in the public domain.
