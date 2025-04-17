@@ -174,8 +174,18 @@ std::unique_ptr<Statement> Parser::parseStatement() {
 
 // Parse a section statement
 std::unique_ptr<SectionStatement> Parser::parseSection() {
-  // Expect section name
-  Token name = consume(TokenType::Identifier, "Expected section name after .section");
+  // The section name could be either an Identifier (if it doesn't start with a period)
+  // or a Directive (if it does start with a period, like .text, .data, etc.)
+  Token name;
+  
+  if (check(TokenType::Identifier)) {
+    name = consume(TokenType::Identifier, "Expected section name after .section");
+  } else if (check(TokenType::Directive)) {
+    name = consume(TokenType::Directive, "Expected section name after .section");
+  } else {
+    error(peek(), "Expected section name after .section");
+    throw std::runtime_error("Expected section name after .section");
+  }
   
   // Create section statement
   return std::make_unique<SectionStatement>(name.value, name.line);
