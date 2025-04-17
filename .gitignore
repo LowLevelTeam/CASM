@@ -53,3 +53,5 @@ dkms.conf
 
 # COIL
 *.coil
+
+build/

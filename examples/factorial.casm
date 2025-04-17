@@ -1,0 +1,38 @@
+; factorial.casm - Calculate factorial of a number
+; Input: Value in r0
+; Output: Factorial in r0
+
+.section .text
+.global factorial
+
+factorial:
+  ; Check if input is 0 or 1
+  cmp r0, 1
+  br.lte base_case
+  
+  ; Recursive case: n * factorial(n-1)
+  push r0            ; Save n
+  dec r0             ; n-1
+  call factorial     ; Calculate factorial(n-1)
+  pop r1             ; Restore n to r1
+  mul r0, r0, r1     ; r0 = factorial(n-1) * n
+  ret
+  
+base_case:
+  ; Base case: return 1
+  load r0, 1
+  ret
+
+; Calculate factorial of 5
+.section .text
+.global main
+
+main:
+  ; Load argument
+  load r0, 5
+  
+  ; Call factorial function
+  call factorial
+  
+  ; Result is in r0
+  ret
