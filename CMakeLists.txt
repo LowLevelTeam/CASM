@@ -55,8 +55,21 @@ target_include_directories(casm
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+# Create a library target for tests to use
+add_library(casml STATIC 
+  src/token.cpp
+  src/lexer.cpp
+  src/parser.cpp
+  src/assembler.cpp
+)
+target_include_directories(casml
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 # Link against COIL library
 target_link_libraries(casm PRIVATE coil::coil)
+target_link_libraries(casml PUBLIC coil::coil)
 
 # Version definitions
 target_compile_definitions(casm PRIVATE 

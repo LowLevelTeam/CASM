@@ -1,4 +1,4 @@
-#include "casm/token.hpp"
+#include <casm/token.hpp>
 #include <sstream>
 #include <cctype>
 #include <regex>

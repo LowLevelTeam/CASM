@@ -1,4 +1,4 @@
-#include "casm/parser.hpp"
+#include <casm/parser.hpp>
 #include <sstream>
 
 namespace casm {

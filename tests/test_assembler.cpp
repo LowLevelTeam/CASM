@@ -102,8 +102,8 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles sections and global symbols
   REQUIRE(textSection != nullptr);
   REQUIRE(dataSection != nullptr);
   
-  CHECK(textSection->getSectionType() == static_cast<u8>(coil::SectionType::ProgBits));
-  CHECK(dataSection->getSectionType() == static_cast<u8>(coil::SectionType::ProgBits));
+  CHECK(textSection->getSectionType() == static_cast<coil::u8>(coil::SectionType::ProgBits));
+  CHECK(dataSection->getSectionType() == static_cast<coil::u8>(coil::SectionType::ProgBits));
   
   CHECK((textSection->getHeader().flags & static_cast<uint16_t>(coil::SectionFlag::Code)) != 0);
   CHECK((dataSection->getHeader().flags & static_cast<uint16_t>(coil::SectionFlag::Write)) != 0);
@@ -116,7 +116,7 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles sections and global symbols
   REQUIRE(mainSymbol != nullptr);
   
   CHECK(mainSymbol->section_index == textSectionIndex);
-  CHECK(mainSymbol->binding == static_cast<u8>(coil::SymbolBinding::Global));
+  CHECK(mainSymbol->binding == static_cast<coil::u8>(coil::SymbolBinding::Global));
   
   // Data section should have data
   const coil::DataSection* dataSecData = dynamic_cast<const coil::DataSection*>(dataSection);
@@ -178,7 +178,7 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles data directives", "[assembl
   const coil::DataSection* dataSecData = dynamic_cast<const coil::DataSection*>(dataSection);
   REQUIRE(dataSecData != nullptr);
   
-  const std::vector<u8>& data = dataSecData->getData();
+  const std::vector<coil::u8>& data = dataSecData->getData();
   REQUIRE(!data.empty());
   
   // Check section size (rough estimate)
@@ -307,7 +307,7 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles complete factorial example"
   REQUIRE(factorialSymbol != nullptr);
   
   CHECK(factorialSymbol->section_index == textSectionIndex);
-  CHECK(factorialSymbol->binding == static_cast<u8>(coil::SymbolBinding::Global));
+  CHECK(factorialSymbol->binding == static_cast<coil::u8>(coil::SymbolBinding::Global));
   
   // Both sections should have data
   const coil::DataSection* textSection = dynamic_cast<const coil::DataSection*>(obj.getSection(textSectionIndex));
@@ -320,7 +320,7 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles complete factorial example"
   CHECK(!dataSection->getData().empty());
   
   // Check that data section contains the factorial input value (5)
-  const std::vector<u8>& data = dataSection->getData();
+  const std::vector<coil::u8>& data = dataSection->getData();
   REQUIRE(data.size() >= 4); // At least 4 bytes for i32
   
   // Check the i32 value if it's 5 (little-endian)

@@ -116,6 +116,40 @@ public:
   
   std::string toString() const;
   
+  // Copy constructor
+  Instruction(const Instruction& other)
+    : m_name(other.m_name), m_parameters(other.m_parameters) 
+  {
+    // Deep copy the operands
+    for (const auto& op : other.m_operands) {
+      if (op) {
+        // Clone each operand based on its type
+        switch (op->getType()) {
+          case Operand::Type::Register:
+            addOperand(Operand::createRegister(
+              static_cast<const RegisterOperand*>(op.get())->getName()
+            ));
+            break;
+          case Operand::Type::Immediate:
+            addOperand(Operand::createImmediate(
+              static_cast<const ImmediateOperand*>(op.get())->getValue()
+            ));
+            break;
+          case Operand::Type::Memory:
+            addOperand(Operand::createMemory(
+              static_cast<const MemoryOperand*>(op.get())->getReference()
+            ));
+            break;
+          case Operand::Type::Label:
+            addOperand(Operand::createLabel(
+              static_cast<const LabelOperand*>(op.get())->getLabel()
+            ));
+            break;
+        }
+      }
+    }
+  }
+
 private:
   std::string m_name;
   std::vector<std::string> m_parameters;
@@ -137,6 +171,40 @@ public:
   
   std::string toString() const;
   
+  // Copy constructor
+  Directive(const Directive& other)
+    : m_name(other.m_name) 
+  {
+    // Deep copy the operands
+    for (const auto& op : other.m_operands) {
+      if (op) {
+        // Clone each operand based on its type
+        switch (op->getType()) {
+          case Operand::Type::Register:
+            addOperand(Operand::createRegister(
+              static_cast<const RegisterOperand*>(op.get())->getName()
+            ));
+            break;
+          case Operand::Type::Immediate:
+            addOperand(Operand::createImmediate(
+              static_cast<const ImmediateOperand*>(op.get())->getValue()
+            ));
+            break;
+          case Operand::Type::Memory:
+            addOperand(Operand::createMemory(
+              static_cast<const MemoryOperand*>(op.get())->getReference()
+            ));
+            break;
+          case Operand::Type::Label:
+            addOperand(Operand::createLabel(
+              static_cast<const LabelOperand*>(op.get())->getLabel()
+            ));
+            break;
+        }
+      }
+    }
+  }
+
 private:
   std::string m_name;
   std::vector<std::unique_ptr<Operand>> m_operands;
@@ -167,6 +235,56 @@ public:
   // Directive statement with optional label
   Statement(std::unique_ptr<Directive> directive, 
             std::string label = "");
+
+  // Move constructor
+  Statement(Statement&& other) noexcept
+    : m_type(other.m_type),
+      m_label(std::move(other.m_label)),
+      m_instruction(std::move(other.m_instruction)),
+      m_directive(std::move(other.m_directive)) {
+  }
+
+  // Move assignment operator
+  Statement& operator=(Statement&& other) noexcept {
+    if (this != &other) {
+      m_type = other.m_type;
+      m_label = std::move(other.m_label);
+      m_instruction = std::move(other.m_instruction);
+      m_directive = std::move(other.m_directive);
+    }
+    return *this;
+  }
+
+  // Copy constructor
+  Statement(const Statement& other)
+    : m_type(other.m_type),
+      m_label(other.m_label) {
+    if (other.m_instruction) {
+      m_instruction = std::make_unique<Instruction>(*other.m_instruction);
+    }
+    if (other.m_directive) {
+      m_directive = std::make_unique<Directive>(*other.m_directive);
+    }
+  }
+
+  // Copy assignment operator
+  Statement& operator=(const Statement& other) {
+    if (this != &other) {
+      m_type = other.m_type;
+      m_label = other.m_label;
+      if (other.m_instruction) {
+        m_instruction = std::make_unique<Instruction>(*other.m_instruction);
+      } else {
+        m_instruction.reset();
+      }
+      if (other.m_directive) {
+        m_directive = std::make_unique<Directive>(*other.m_directive);
+      } else {
+        m_directive.reset();
+      }
+    }
+    return *this;
+  }
   
   Type getType() const { return m_type; }
   const std::string& getLabel() const { return m_label; }
