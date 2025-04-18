@@ -36,7 +36,7 @@
 
 .section .data ^ProgBits ^Write ^Alloc
 #factorial_input
-  .i32 5                       ; Calculate factorial of 5
+  .i32 $id5                       ; Calculate factorial of 5
 
 #factorial_result
-  .i32 0                       ; Space for result
+  .i32 $id0                       ; Space for result
