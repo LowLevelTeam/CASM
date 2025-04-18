@@ -75,8 +75,8 @@ TEST_CASE_METHOD(CoilTestFixture, "Assembler handles sections and global symbols
       
     .section .data
     #constants
-      .i32 1, 2, 3, 4
-      .asciiz "Hello, world!"
+      .i32 $id1, $id2, $id3, $id4
+      .asciiz $"Hello, world!"
   )";
   
   // Create assembler

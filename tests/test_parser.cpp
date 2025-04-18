@@ -3,6 +3,7 @@
 #include "casm/parser.hpp"
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 using namespace Catch;
 
@@ -121,7 +122,7 @@ TEST_CASE("Parser parses labels and directives", "[parser]") {
         foundSectionDirective = true;
         REQUIRE(directive->getOperands().size() == 1);
         CHECK(directive->getOperands()[0]->getType() == casm::Operand::Type::Label);
-        CHECK(static_cast<const casm::LabelOperand*>(directive->getOperands()[0].get())->getLabel() == "text");
+        CHECK(static_cast<const casm::LabelOperand*>(directive->getOperands()[0].get())->getLabel() == ".text");
         break;
       }
     }
@@ -131,12 +132,12 @@ TEST_CASE("Parser parses labels and directives", "[parser]") {
   // Find main label and its instructions
   bool foundMainLabel = false;
   for (size_t i = 0; i < filtered.size(); ++i) {
-    if (filtered[i].getType() == casm::Statement::Type::Instruction && 
+    if (filtered[i].getType() == casm::Statement::Type::Label && 
         filtered[i].getLabel() == "main") {
       foundMainLabel = true;
       
       // Check mov instruction
-      auto* instr = filtered[i].getInstruction();
+      auto* instr = filtered[i + 1].getInstruction();
       REQUIRE(instr != nullptr);
       CHECK(instr->getName() == "mov");
       REQUIRE(instr->getOperands().size() == 2);
@@ -145,8 +146,8 @@ TEST_CASE("Parser parses labels and directives", "[parser]") {
       CHECK(instr->getOperands()[1]->getType() == casm::Operand::Type::Immediate);
       
       // Check call instruction (next statement)
-      if (i + 1 < filtered.size()) {
-        auto* callInstr = filtered[i + 1].getInstruction();
+      if (i + 2 < filtered.size()) {
+        auto* callInstr = filtered[i + 2].getInstruction();
         REQUIRE(callInstr != nullptr);
         CHECK(callInstr->getName() == "call");
         REQUIRE(callInstr->getOperands().size() == 1);
@@ -242,11 +243,11 @@ TEST_CASE("Parser parses memory operations", "[parser]") {
 TEST_CASE("Parser parses data directives", "[parser]") {
   std::string source = R"(
     .section .data
-    .i32 1, 2, 3, 4     ; 32-bit integers
-    .f64 3.14, 2.71     ; 64-bit floats
+    .i32 $id1, $id2, $id3, $id4     ; 32-bit integers
+    .f64 $fd3.14, $fd2.71     ; 64-bit floats
     #string_data
-    .ascii "Hello"      ; ASCII string
-    .asciiz "World"     ; Null-terminated string
+    .ascii $"Hello"      ; ASCII string
+    .asciiz $"World"     ; Null-terminated string
   )";
   
   casm::Lexer lexer("test", source);

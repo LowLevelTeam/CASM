@@ -280,6 +280,11 @@ std::unique_ptr<Instruction> Parser::parseInstruction() {
   
   // Parse operands
   while (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile) {
+    if (peek().type == TokenType::Comment) {
+      advance(); // consume comment
+      continue;
+    }
+
     // Parse operand
     auto operand = parseOperand();
     instruction->addOperand(std::move(operand));
@@ -287,8 +292,8 @@ std::unique_ptr<Instruction> Parser::parseInstruction() {
     // Check for comma
     if (peek().type == TokenType::Comma) {
       advance(); // Consume comma
-    } else if (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile) {
-      // If not EOL or EOF, expect a comma
+    } else if (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile && peek().type != TokenType::Comment) {
+      // If not EOL or EOF or Comment, expect a comma
       std::ostringstream ss;
       ss << "Expected comma or end of line, got " << peek().toString();
       throw ParserException(ss.str());
@@ -306,6 +311,11 @@ std::unique_ptr<Directive> Parser::parseDirective() {
   
   // Parse operands
   while (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile) {
+    if (peek().type == TokenType::Comment) {
+      advance(); // consume comment
+      continue;
+    }
+    
     // Parse operand
     auto operand = parseOperand();
     directive->addOperand(std::move(operand));
@@ -313,7 +323,7 @@ std::unique_ptr<Directive> Parser::parseDirective() {
     // Check for comma
     if (peek().type == TokenType::Comma) {
       advance(); // Consume comma
-    } else if (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile) {
+    } else if (peek().type != TokenType::EndOfLine && peek().type != TokenType::EndOfFile && peek().type != TokenType::Comment) {
       // If not EOL or EOF, expect a comma
       std::ostringstream ss;
       ss << "Expected comma or end of line, got " << peek().toString();

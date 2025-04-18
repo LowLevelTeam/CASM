@@ -91,7 +91,7 @@ TEST_CASE("Lexer tokenizes labels and directives", "[lexer]") {
   CHECK(filtered[0].type == casm::TokenType::Directive);
   CHECK(filtered[0].value == "section");
   CHECK(filtered[1].type == casm::TokenType::LabelRef);
-  CHECK(filtered[1].value == "text");
+  CHECK(filtered[1].value == ".text");
   
   CHECK(filtered[2].type == casm::TokenType::Label);
   CHECK(filtered[2].value == "main");
@@ -250,8 +250,8 @@ TEST_CASE("Lexer tokenizes data directives", "[lexer]") {
     .section .data
     .i32 1, 2, 3, 4     ; 32-bit integers
     .f64 3.14, 2.71     ; 64-bit floats
-    .ascii "Hello"      ; ASCII string
-    .asciiz "World"     ; Null-terminated string
+    .ascii $"Hello"      ; ASCII string
+    .asciiz $"World"     ; Null-terminated string
   )";
   
   casm::Lexer lexer("test", source);

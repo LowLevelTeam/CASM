@@ -244,6 +244,7 @@ Token Lexer::scanLabel() {
   return Token::makeLabel(name, location);
 }
 
+// In lexer.cpp, modify the scanDirective function
 Token Lexer::scanDirective() {
   SourceLocation location = currentLocation();
   advance(); // Skip '.'
@@ -260,7 +261,8 @@ Token Lexer::scanDirective() {
   
   // Verify that it's a known directive
   if (KNOWN_DIRECTIVES.find(name) == KNOWN_DIRECTIVES.end()) {
-    return Token::makeError("Unknown directive: ." + name, location);
+    // If it's not a known directive, treat it as a label reference
+    return Token::makeLabelRef(std::string(".") + name, location);
   }
   
   return Token::makeDirective(name, location);
@@ -381,7 +383,13 @@ Token Lexer::scanImmediate() {
     
     // Collect the digits
     bool hasDecimal = false;
-    while (!isAtEnd() && (std::isalnum(current()) || current() == '.' || current() == '_')) {
+    while (
+      !isAtEnd() && (
+        std::isalnum(current()) 
+        || current() == '.' || current() == '_' 
+        || current() == '-' || current() == '+'
+      )
+    ) { 
       if (current() == '.') {
         if (hasDecimal) {
           return Token::makeError("Multiple decimal points in number", location);
